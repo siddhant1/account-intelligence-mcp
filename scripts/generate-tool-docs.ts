@@ -1,0 +1,158 @@
+/**
+ * Generates docs/TOOLS.md from the registered tools: the same JSON Schemas
+ * clients receive from tools/list, plus real example calls against seed data.
+ * Run with `npm run docs:tools`; the docs can never drift from the code.
+ */
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ALL_SCOPES } from '../src/auth/scopes.js';
+import { loadConfig } from '../src/config.js';
+import { createContainer } from '../src/container.js';
+import { openDatabase } from '../src/db/database.js';
+import { seedDatabase } from '../src/db/seed/seed.js';
+import { createLogger } from '../src/logger.js';
+import { createMcpServer } from '../src/mcp/server.js';
+import { TOOLS } from '../src/mcp/tools/index.js';
+
+const EXAMPLES: Record<string, Record<string, unknown>> = {
+  search_companies: { query: 'AI companies', country: 'Australia', limit: 3 },
+  get_company: { companyId: 'cmp_1' },
+  search_contacts: { companyId: 'cmp_1', jobTitle: 'Engineer' },
+  enrich_contact: { contactId: 'cnt_3' },
+  export_contacts: { contactIds: ['cnt_3', 'cnt_7'] },
+};
+
+const config = loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', LOG_PRETTY: 'false', ENRICHMENT_LATENCY_MS: '0' });
+const db = openDatabase(':memory:');
+seedDatabase(db);
+const fixedNow = new Date('2026-01-15T09:30:00.000Z');
+const container = createContainer(config, createLogger(config), { db, clock: () => fixedNow });
+
+const server = createMcpServer({
+  services: container.services,
+  principal: { apiKeyId: 'key_docs', apiKeyName: 'docs', scopes: ALL_SCOPES },
+  logger: container.logger,
+});
+const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+const client = new Client({ name: 'docs-generator', version: '1.0.0' });
+await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+interface JsonSchemaProperty {
+  type?: string;
+  description?: string;
+  enum?: unknown[];
+  items?: JsonSchemaProperty;
+  minimum?: number;
+  maximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  minItems?: number;
+  maxItems?: number;
+  pattern?: string;
+  default?: unknown;
+}
+
+function typeOf(schema: JsonSchemaProperty): string {
+  if (schema.enum) return schema.enum.map((value) => `\`${JSON.stringify(value)}\``).join(' \\| ');
+  if (schema.type === 'array' && schema.items) return `${typeOf(schema.items)}[]`;
+  return schema.type ?? 'any';
+}
+
+function constraintsOf(schema: JsonSchemaProperty): string {
+  const items = schema.items ?? {};
+  return [
+    schema.pattern ?? items.pattern ? `pattern \`${schema.pattern ?? items.pattern}\`` : '',
+    schema.minLength !== undefined ? `${schema.minLength}-${schema.maxLength} chars` : '',
+    schema.minimum !== undefined ? `≥ ${schema.minimum}` : '',
+    schema.maximum !== undefined && schema.maximum < Number.MAX_SAFE_INTEGER ? `≤ ${schema.maximum}` : '',
+    schema.minItems !== undefined ? `${schema.minItems}-${schema.maxItems} items` : '',
+    schema.default !== undefined ? `default \`${JSON.stringify(schema.default)}\`` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+const { tools } = await client.listTools();
+const sections: string[] = [];
+
+for (const tool of tools) {
+  const definition = TOOLS.find((candidate) => candidate.name === tool.name)!;
+  const required = new Set(tool.inputSchema.required ?? []);
+  const properties = Object.entries((tool.inputSchema.properties ?? {}) as Record<string, JsonSchemaProperty>);
+  const hints = Object.entries(tool.annotations ?? {})
+    .filter(([key]) => key.endsWith('Hint'))
+    .map(([key, value]) => `\`${key}: ${value}\``)
+    .join(' · ');
+
+  const example = EXAMPLES[tool.name]!;
+  const result = await client.callTool({ name: tool.name, arguments: example });
+
+  sections.push(
+    [
+      `## \`${tool.name}\``,
+      '',
+      `**${tool.title}**: ${tool.description}`,
+      '',
+      `- Required scope: \`${definition.scope}\``,
+      `- Annotations: ${hints}`,
+      '',
+      '### Input',
+      '',
+      '| Field | Type | Required | Constraints | Description |',
+      '| --- | --- | --- | --- | --- |',
+      ...properties.map(
+        ([name, schema]) =>
+          `| \`${name}\` | ${typeOf(schema)} | ${required.has(name) ? 'yes' : 'no'} | ${constraintsOf(schema)} | ${schema.description ?? ''} |`,
+      ),
+      '',
+      '### Example',
+      '',
+      '```jsonc',
+      `// tools/call arguments`,
+      JSON.stringify(example, null, 2),
+      '',
+      '// structuredContent of the result',
+      JSON.stringify(result.structuredContent, null, 2),
+      '```',
+      '',
+      '<details><summary>Output JSON Schema</summary>',
+      '',
+      '```json',
+      JSON.stringify(tool.outputSchema, null, 2),
+      '```',
+      '',
+      '</details>',
+    ].join('\n'),
+  );
+}
+
+const markdown = `# Tool reference
+
+> Generated by \`npm run docs:tools\` from the live tool definitions. Do not edit by hand.
+
+Every tool returns its result twice: as \`structuredContent\` (validated against the output schema below) and as a JSON
+\`text\` block for clients that do not support structured output. Failures return \`isError: true\` with a JSON body:
+
+\`\`\`json
+{ "error": { "code": "NOT_FOUND", "message": "Company cmp_9999 was not found", "hint": "Use search_companies to look up valid company IDs." } }
+\`\`\`
+
+| Error code | Meaning |
+| --- | --- |
+| \`INVALID_ARGUMENT\` | Input passed the schema but is not valid (for example an unknown country). Schema violations are reported by the SDK as \`Input validation error: ...\`. |
+| \`NOT_FOUND\` | A referenced company or contact does not exist. The hint says which tool finds valid IDs. |
+| \`FORBIDDEN\` | The API key lacks the scope this tool needs. |
+| \`INTERNAL\` | Unexpected server failure. Details are logged server-side, never returned. |
+
+Contents: ${tools.map((tool) => `[\`${tool.name}\`](#${tool.name})`).join(' · ')}
+
+${sections.join('\n\n---\n\n')}
+`;
+
+const target = path.resolve(import.meta.dirname, '../docs/TOOLS.md');
+writeFileSync(target, markdown);
+console.log(`Wrote ${path.relative(process.cwd(), target)} (${tools.length} tools)`);
+await client.close();
+container.close();

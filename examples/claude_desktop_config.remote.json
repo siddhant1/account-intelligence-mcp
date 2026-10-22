@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "account-intelligence": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:3100/mcp", "--header", "Authorization:${AUTH_HEADER}"],
+      "env": {
+        "AUTH_HEADER": "Bearer <paste an API key, e.g. DEV_API_KEY from .env>"
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "account-intelligence": {
+      "url": "http://localhost:3100/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:ACCOUNT_INTEL_API_KEY}"
+      }
+    }
+  }
+}

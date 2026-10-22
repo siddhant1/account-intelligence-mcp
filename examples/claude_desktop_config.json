@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "account-intelligence": {
+      "command": "/ABSOLUTE/PATH/TO/node",
+      "args": ["/ABSOLUTE/PATH/TO/account-intelligence-mcp/dist/stdio.js"],
+      "env": {
+        "ACCOUNT_INTEL_API_KEY": "<paste an API key, e.g. DEV_API_KEY from .env>",
+        "LOG_PRETTY": "false"
+      }
+    }
+  }
+}

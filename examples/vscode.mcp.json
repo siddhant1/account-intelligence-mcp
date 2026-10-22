@@ -1,0 +1,19 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "account-intel-api-key",
+      "description": "Account Intelligence API key",
+      "password": true
+    }
+  ],
+  "servers": {
+    "account-intelligence": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp",
+      "headers": {
+        "Authorization": "Bearer ${input:account-intel-api-key}"
+      }
+    }
+  }
+}

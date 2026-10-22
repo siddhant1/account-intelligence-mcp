@@ -1,0 +1,200 @@
+Account Intelligence MCP demo client → http://localhost:3100/mcp
+
+━━━ 1. Authentication flow ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶ Request with no API key
+  ✖ HTTP 401 · WWW-Authenticate: Bearer realm="account-intelligence-mcp"
+    {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32001,
+        "message": "Authentication required: send your API key as \"Authorization: Bearer <key>\" or \"X-API-Key: <key>\""
+      },
+      "id": null
+    }
+▶ MCP SDK client with an invalid key
+  ✖ connect() failed: StreamableHTTPError code=401
+  Streamable HTTP error: Error POSTing to endpoint: {"jsonrpc":"2.0","error":{"code":-32001,"message":"Invalid API key"},"id":null}
+▶ MCP SDK client with a valid key (Authorization: Bearer aip_dev_7BOf…)
+  ✔ initialized: Account Intelligence Platform v1.0.0
+  server instructions: "Account intelligence for B2B prospecting: companies, the people who work there, and their contact details."
+▶ X-API-Key header works too (aip_dev_O49H…)
+  ✔ initialized with the read-only key
+
+━━━ 2. Tool discovery ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶ tools/list with the full-access key
+    tool              required    optional                                                     hints           
+    search_companies  -           query, country, industry, minEmployees, maxEmployees, limit  read-only       
+    get_company       companyId   -                                                            read-only       
+    search_contacts   -           companyId, jobTitle, seniority, department, limit            read-only       
+    enrich_contact    contactId   -                                                            writes, external
+    export_contacts   contactIds  format                                                       writes          
+▶ Input and output schema of search_companies (JSON Schema generated from Zod)
+  Search the company database by free text and filters. Text matches company name, industry, description and tags with relevance ranking; filler words such as "companies" are ignored and shorthand like "AI" or "fintech" is expanded. Returns compact summaries; call get_company for full details or search_contacts to find people.
+    field         type     constraints                description                                                 
+    query         string   ≤200 chars                 Free-text query, e.g. "AI companies", "payments", "computer 
+    country       string   ≤60 chars                  Country name or ISO code, e.g. "Australia" or "AU"          
+    industry      string   ≤60 chars                  Industry filter (partial, case-insensitive), e.g. "Fintech",
+    minEmployees  integer  min 1                      Minimum headcount (inclusive)                               
+    maxEmployees  integer  min 1                      Maximum headcount (inclusive)                               
+    limit         integer  min 1, max 50, default 10  Maximum results to return (1-50, default 10)                
+  outputSchema: { results, total }
+▶ Resources and prompts
+  ✔ 62 company resources, e.g. account-intel://companies/cmp_30 (Bayview Health Systems)
+  ✔ prompts: build_prospect_list
+▶ tools/list with the read-only key (scopes: companies:read contacts:read)
+  ✔ 3 tools: search_companies, get_company, search_contacts
+  enrich_contact and export_contacts are hidden: tools are filtered by API key scope
+
+━━━ 3. Tool execution ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶ Search companies
+  → search_companies {"query":"AI companies","country":"Australia","limit":5}
+    id      name                      industry                 employees  city     
+    cmp_2   Kookaburra AI             Artificial Intelligence  85         Brisbane 
+    cmp_3   Southern Cross Analytics  Artificial Intelligence  210        Melbourne
+    cmp_17  Clearwater Legal AI       Legal Tech               28         Canberra 
+    cmp_21  Lyrebird Voice            Artificial Intelligence  48         Melbourne
+    cmp_4   Coral Vision              Artificial Intelligence  34         Cairns   
+  5 of 11 matches
+▶ Get company details
+  → get_company {"companyId":"cmp_1"}
+    {
+      "id": "cmp_1",
+      "name": "Signalgrid",
+      "website": "https://www.signalgrid.example",
+      "industry": "Software",
+      "employees": 120,
+      "description": "B2B data platform giving sales and marketing teams AI-powered company and contact intelligence across APAC.",
+      "country": "Australia",
+      "city": "Sydney",
+      "foundedYear": 2016,
+      "tags": [
+        "B2B data",
+        "sales intelligence",
+        "AI",
+        "data enrichment"
+      ],
+      "contactCount": 8
+    }
+▶ Search contacts
+  → search_contacts {"companyId":"cmp_1","jobTitle":"Engineer"}
+    id     name           title                      seniority               enriched
+    cnt_3  Rohan Ryan     Machine Learning Engineer  senior                  false   
+    cnt_7  Hannah Okafor  Senior Software Engineer   senior                  false   
+    cnt_6  Mason Okafor   Software Engineer          individual_contributor  false   
+▶ Enrich contact
+  → enrich_contact {"contactId":"cnt_3"}
+    {
+      "contactId": "cnt_3",
+      "name": "Rohan Ryan",
+      "email": "rohanr@signalgrid.example",
+      "linkedin": "https://www.linkedin.com/in/rohan-ryan-facd49",
+      "phone": null,
+      "enrichedAt": "2026-10-22T12:21:48.590Z",
+      "cached": false
+    }
+  → enrich_contact {"contactId":"cnt_3"}
+  ✔ second call served from storage: cached=true
+▶ Export contacts
+  → export_contacts {"contactIds":["cnt_3","cnt_7","cnt_6"]}
+    {
+      "exportId": "exp_dsNdAeCtzzsrZyjK",
+      "downloadUrl": "http://localhost:3100/exports/exp_dsNdAeCtzzsrZyjK?expires=1792672608&signature=t81f7mk3xMqAOX_igKfEY_ukqXImEfa8JbMABMf3Zu0",
+      "format": "csv",
+      "contactCount": 3,
+      "expiresAt": "2026-10-22T12:36:48.598Z"
+    }
+▶ Download the export via its signed URL (no API key needed)
+  ✔ HTTP 200 · text/csv; charset=utf-8 · attachment; filename="contacts-2026-10-22-dsNdAeCt.csv"
+    contact_id,full_name,first_name,last_name,title,seniority,department,location,company_id,company_name,email,li…
+    cnt_3,Rohan Ryan,Rohan,Ryan,Machine Learning Engineer,senior,engineering,"Remote, Australia",cmp_1,Signalgrid,…
+    cnt_7,Hannah Okafor,Hannah,Okafor,Senior Software Engineer,senior,engineering,"Sydney, Australia",cmp_1,Signal…
+    cnt_6,Mason Okafor,Mason,Okafor,Software Engineer,individual_contributor,engineering,"Sydney, Australia",cmp_1…
+
+━━━ 4. Error handling ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶ Schema validation: malformed ID
+  → get_company {"companyId":"acme-corp"}
+  ✖ isError: true
+    MCP error -32602: Input validation error: Invalid arguments for tool get_company: must be a company ID such as "cmp_1" at companyId
+▶ Schema validation: out-of-range limit
+  → search_companies {"query":"fintech","limit":500}
+  ✖ isError: true
+    MCP error -32602: Input validation error: Invalid arguments for tool search_companies: Too big: expected number to be <=50 at limit
+▶ Not found, with a recovery hint for the model
+  → get_company {"companyId":"cmp_9999"}
+  ✖ isError: true
+    {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "Company cmp_9999 was not found",
+        "hint": "Use search_companies to look up valid company IDs."
+      }
+    }
+▶ Business validation: unknown country
+  → search_companies {"query":"fintech","country":"Atlantis"}
+  ✖ isError: true
+    {
+      "error": {
+        "code": "INVALID_ARGUMENT",
+        "message": "Unknown country \"Atlantis\"",
+        "hint": "Countries in the dataset: Australia, Canada, Germany, India, Ireland, New Zealand, Singapore, United Kingdom, United States."
+      }
+    }
+▶ Partial failure is rejected atomically: export with unknown IDs
+  → export_contacts {"contactIds":["cnt_1","cnt_424242"]}
+  ✖ isError: true
+    {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "1 of 2 contact IDs were not found: cnt_424242",
+        "hint": "Remove the unknown IDs, or use search_contacts to find valid ones. Nothing was exported.",
+        "details": {
+          "missingIds": [
+            "cnt_424242"
+          ]
+        }
+      }
+    }
+▶ Scope enforcement: read-only key calls enrich_contact
+  → enrich_contact {"contactId":"cnt_1"}
+  ✖ isError: true
+    MCP error -32602: Tool enrich_contact not found
+▶ Tampered download link
+  ✖ HTTP 403
+    {
+      "error": {
+        "code": "FORBIDDEN",
+        "message": "Invalid or missing download signature",
+        "hint": "Request a new link with export_contacts."
+      }
+    }
+▶ Malformed JSON-RPC body
+  ✖ HTTP 400
+    {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32700,
+        "message": "Parse error: request body is not valid JSON"
+      },
+      "id": null
+    }
+▶ Rate limiting: burst of pings with the read-only key
+  ✔ 109 requests accepted, then:
+  ✖ HTTP 429 · Retry-After: 60s · RateLimit-Policy: "120-in-1min"; q=120; w=60; pk=:NDQ4YjU2YjZhYmE5:
+    {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32029,
+        "message": "Rate limit exceeded: 120 requests per 60s",
+        "data": {
+          "retryAfterSeconds": 60
+        }
+      },
+      "id": null
+    }
+  the read-only key is throttled until the window resets; other keys are unaffected
+
+Demo complete.

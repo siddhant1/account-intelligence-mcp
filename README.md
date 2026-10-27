@@ -60,7 +60,6 @@ Built with Node.js, TypeScript (strict), the official MCP TypeScript SDK, Expres
 - [Configuration](#configuration)
 - [Testing](#testing)
 - [Demo](#demo)
-- [Trade-offs and next steps](#trade-offs-and-next-steps)
 
 ## Quick start
 
@@ -338,20 +337,3 @@ fails if `docs/TOOLS.md` is out of date with the code.
   Desktop and the demo client.
 - `npm run demo -- --section errors` runs one section (`auth`, `discovery`, `execution`, `errors`). Use
   `--no-rate-limit` to skip the burst that exhausts the read-only key's quota for a minute.
-
-## Trade-offs and next steps
-
-- **API keys rather than OAuth 2.1.** Keys suit server-to-server and developer-tool clients and keep setup to one
-  header. The auth middleware already produces the SDK's `AuthInfo`, so adding OAuth 2.1 + PKCE (the SDK's
-  `mcpAuthRouter` and `requireBearerAuth`, with protected-resource metadata) would change one middleware. Scopes map
-  one to one.
-- **SQLite** keeps setup to `npm install`. The repositories are the only SQL, so moving to PostgreSQL (`tsvector` for
-  search) is contained to that layer.
-- **Single-instance state:** rate-limit counters, failed-auth counters and export files are local. For several replicas,
-  plug in Redis (express-rate-limit store) and object storage with native presigned URLs. MCP itself is already
-  stateless.
-- **Enrichment de-duplication** is per process. With several replicas, a unique "enrichment job" row (or an advisory
-  lock) per contact gives the same one-lookup guarantee.
-- **Enrichment credits:** a per-key credit ledger and a `dryRun`/cost preview are natural additions before connecting a
-  paid vendor.
-- **Pagination:** searches return `total`, so a `cursor` parameter would be an additive change.

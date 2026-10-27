@@ -3,7 +3,7 @@ import { SEED_COMPANIES } from './companies.js';
 
 /**
  * Deterministic seed data: the same companies and contacts (and therefore the
- * same IDs) on every run, so demos, docs and tests can reference them.
+ * same IDs) on every run, so docs and tests can reference them.
  */
 
 const FIRST_NAMES = [
@@ -247,7 +247,7 @@ export function buildSeedData(): { companies: Company[]; contacts: Omit<Contact,
 
   const contacts: Omit<Contact, 'enrichment'>[] = [];
   for (const company of companies) {
-    // The first company gets a larger team so the demo has more to show.
+    // The first company gets a larger team so examples have more to show.
     const count = company.id === 'cmp_1' ? 8 : contactCountFor(company.employees);
     const usedNames = new Set<string>();
 

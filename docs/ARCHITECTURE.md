@@ -12,7 +12,7 @@ flowchart LR
   subgraph Clients["MCP clients"]
     CD["Claude Desktop<br/>(stdio)"]
     CR["Claude Desktop via mcp-remote,<br/>Cursor, VS Code, Claude Code"]
-    DC["Custom demo client<br/>(scripts/demo-client.ts)"]
+    DC["MCP Inspector, curl<br/>(examples/curl.sh)"]
   end
 
   subgraph Transport["Transport layer"]

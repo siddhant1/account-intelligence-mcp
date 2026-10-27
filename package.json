@@ -21,7 +21,6 @@
     "test:coverage": "vitest run --coverage",
     "db:seed": "tsx src/cli/seed.ts",
     "keys": "tsx src/cli/keys.ts",
-    "demo": "tsx scripts/demo-client.ts",
     "docs:tools": "tsx scripts/generate-tool-docs.ts",
     "inspector": "npx @modelcontextprotocol/inspector"
   },
@@ -42,7 +41,6 @@
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
-    "picocolors": "^1.1.1",
     "pino-pretty": "^13.2.0",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",

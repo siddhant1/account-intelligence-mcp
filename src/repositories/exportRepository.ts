@@ -26,7 +26,7 @@ const toRecord = (row: ExportRow): ExportRecord => ({
 });
 
 /**
- * Stores generated export files. SQLite keeps the demo self-contained; in
+ * Stores generated export files. SQLite keeps the project self-contained; in
  * production this would be object storage (S3/GCS) with presigned URLs.
  */
 export class ExportRepository {

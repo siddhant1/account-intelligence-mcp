@@ -20,8 +20,8 @@
 <text x="740.0" y="106.0" class="bt" text-anchor="middle">Claude Desktop via mcp-remote</text>
 <text x="740.0" y="124.0" class="bl" text-anchor="middle">Cursor · VS Code · Claude Code (HTTP)</text>
 <rect x="960" y="76" width="260" height="66" rx="9" fill="#ffffff" stroke="#7C3AED" stroke-width="1.6"/>
-<text x="1090.0" y="106.0" class="bt" text-anchor="middle">Custom demo client</text>
-<text x="1090.0" y="124.0" class="bl" text-anchor="middle">scripts/demo-client.ts</text>
+<text x="1090.0" y="106.0" class="bt" text-anchor="middle">MCP Inspector · curl</text>
+<text x="1090.0" y="124.0" class="bl" text-anchor="middle">examples/curl.sh</text>
 <rect x="1320" y="76" width="250" height="66" rx="9" fill="#ffffff" stroke="#7C3AED" stroke-width="1.6"/>
 <text x="1445.0" y="106.0" class="bt" text-anchor="middle">User&#x27;s browser</text>
 <text x="1445.0" y="124.0" class="bl" text-anchor="middle">opens a signed export link</text>

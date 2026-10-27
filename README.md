@@ -32,19 +32,16 @@ Built with Node.js, TypeScript (strict), the official MCP TypeScript SDK, Expres
   clients, and `Host` validation against DNS rebinding.
 - **86 tests** across services, the MCP protocol in-process, HTTP end to end, the stdio process, the CLI and hostile
   input, plus strict TypeScript, ESLint, Prettier and CI on Node 22 and 24 (`npm run check`).
-- **Verified with a real model**: Claude completed a multi-step prospecting task through the server using only tool
-  discovery ([transcript](docs/demo/llm-session.md)).
 
 ## Deliverables
 
-| Requested                                 | Where                                                                                                                                                                       |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Source code repository                    | This repository: [`src/`](src), tests in [`test/`](test)                                                                                                                    |
-| README with setup instructions            | This file: [Quick start](#quick-start) and [Connect an MCP client](#connect-an-mcp-client)                                                                                  |
-| Architecture diagram                      | [`docs/architecture.png`](docs/architecture.png), with request flows and design decisions in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)                                 |
-| Demo (discovery, execution, auth, errors) | Screenshots and transcript in [`docs/demo/`](docs/demo), a real-model session in [`docs/demo/llm-session.md`](docs/demo/llm-session.md), and `npm run demo` to reproduce it |
-| Example MCP client configuration          | [`examples/`](examples): Claude Desktop (stdio and remote), Cursor, VS Code, plus a curl walkthrough                                                                        |
-| Tool reference                            | [`docs/TOOLS.md`](docs/TOOLS.md), generated from the code                                                                                                                   |
+| Requested                        | Where                                                                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source code repository           | This repository: [`src/`](src), tests in [`test/`](test)                                                                                    |
+| README with setup instructions   | This file: [Quick start](#quick-start) and [Connect an MCP client](#connect-an-mcp-client)                                                  |
+| Architecture diagram             | [`docs/architecture.png`](docs/architecture.png), with request flows and design decisions in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| Example MCP client configuration | [`examples/`](examples): Claude Desktop (stdio and remote), Cursor, VS Code, plus a curl walkthrough                                        |
+| Tool reference                   | [`docs/TOOLS.md`](docs/TOOLS.md), generated from the code                                                                                   |
 
 ## Contents
 
@@ -59,7 +56,6 @@ Built with Node.js, TypeScript (strict), the official MCP TypeScript SDK, Expres
 - [Architecture](#architecture)
 - [Configuration](#configuration)
 - [Testing](#testing)
-- [Demo](#demo)
 
 ## Quick start
 
@@ -72,13 +68,7 @@ npm run db:seed           # 62 companies, 287 contacts; registers the dev keys f
 npm run dev               # MCP endpoint: http://localhost:3100/mcp
 ```
 
-In a second terminal, run the demo client to watch the whole flow (auth, discovery, execution, errors):
-
-```bash
-npm run demo
-```
-
-Or call the endpoint directly:
+In a second terminal, call the endpoint (unauthenticated request, tool discovery and two tool calls):
 
 ```bash
 ./examples/curl.sh
@@ -100,7 +90,6 @@ Copy-ready configurations are in [`examples/`](examples). Replace the placeholde
 | VS Code (Copilot agent mode)   | HTTP                  | [`examples/vscode.mcp.json`](examples/vscode.mcp.json) → `.vscode/mcp.json` (prompts for the key)                                        |
 | Claude Code                    | HTTP                  | `claude mcp add --transport http account-intelligence http://localhost:3100/mcp --header "Authorization: Bearer $ACCOUNT_INTEL_API_KEY"` |
 | MCP Inspector                  | HTTP                  | `npm run inspector`, then choose _Streamable HTTP_, URL `http://localhost:3100/mcp`, header `Authorization: Bearer <key>`                |
-| Custom client                  | HTTP                  | [`scripts/demo-client.ts`](scripts/demo-client.ts) (`npm run demo`)                                                                      |
 
 **Claude Desktop, local mode.** Run `npm run build` first. Claude Desktop does not inherit your shell's `PATH` (for
 example nvm), so use absolute paths: `which node` gives the `command`, and `args` points to `dist/stdio.js` in this
@@ -238,7 +227,7 @@ the only code that contains SQL. Tables: `companies` with an external-content **
 
 `npm run db:seed` loads a deterministic dataset of **62 companies** across 9 countries and 18 industries, and **287
 contacts** with realistic titles, seniority bands and departments. The same IDs are produced on every run, so `cmp_1`
-and `cnt_3` in the docs and demo always refer to the same records. All companies and people are fictional, and every
+and `cnt_3` in the docs and tests always refer to the same records. All companies and people are fictional, and every
 domain uses the reserved `.example` TLD.
 
 Enrichment goes through an `EnrichmentProvider` interface. The bundled `SimulatedEnrichmentProvider` is deterministic,
@@ -273,10 +262,10 @@ src/
   mcp/                        server factory, registerTool wrapper, shared schemas, tools/*
   http/                       Express app, routes (/mcp, /exports), middleware, error mapping
   cli/                        seed, key management
-scripts/                      demo client, tool-docs generator
+scripts/                      tool-docs generator
 test/                         vitest: services, MCP in-process, HTTP e2e, stdio process
 examples/                     client configurations + curl walkthrough
-docs/                         TOOLS.md (generated), ARCHITECTURE.md, diagram, demo screenshots
+docs/                         TOOLS.md (generated), ARCHITECTURE.md, diagram
 ```
 
 ## Configuration
@@ -298,7 +287,7 @@ invalid configuration fails fast with a readable message.
 | `EXPORT_SIGNING_SECRET`                   | dev value                                    | HMAC secret; **required** (32+ characters) in production                                       |
 | `ENRICHMENT_LATENCY_MS`                   | `150`                                        | Simulated provider latency                                                                     |
 | `LOG_LEVEL` / `LOG_PRETTY`                | `info` / pretty in development at a terminal | Logging; falls back to JSON if `pino-pretty` is not installed                                  |
-| `ACCOUNT_INTEL_API_KEY`                   | none                                         | API key for the stdio transport and the demo client                                            |
+| `ACCOUNT_INTEL_API_KEY`                   | none                                         | API key for the stdio transport and `examples/curl.sh`                                         |
 
 ## Testing
 
@@ -323,17 +312,3 @@ fails if `docs/TOOLS.md` is out of date with the code.
 | `test/audit-fixes.test.ts`    | Regressions from the adversarial audit: title abbreviations and ranking, industry and country resolution, concurrent enrichment, CSV phone numbers, `last_used_at` throttling                      |
 | `test/http-hardening.test.ts` | Origin validation and CORS, link expiry (410), JSON-RPC edge cases (unknown method, notifications, batch), transport rules (406/415/400/413), SQL and FTS injection, malformed and oversized input |
 | `test/cli-config.test.ts`     | Seed and key-management CLIs (create, list, revoke; plaintext shown once), configuration validation and production guards                                                                          |
-
-## Demo
-
-- **Screenshots** of the custom MCP client (`npm run demo`) are in [`docs/demo/`](docs/demo):
-  [authentication](docs/demo/01-authentication.png) · [tool discovery](docs/demo/02-tool-discovery.png) ·
-  [tool execution](docs/demo/03-tool-execution.png) · [error handling](docs/demo/04-error-handling.png) ·
-  [server logs](docs/demo/05-server-logs.png). The full transcript is in
-  [`docs/demo/demo-output.txt`](docs/demo/demo-output.txt).
-- **Real model:** [`docs/demo/llm-session.md`](docs/demo/llm-session.md), Claude completing a five-part prospecting
-  task through the server with no hints beyond tool discovery.
-- **Video script:** [`docs/demo/VIDEO_SCRIPT.md`](docs/demo/VIDEO_SCRIPT.md), a 5-minute walkthrough that uses Claude
-  Desktop and the demo client.
-- `npm run demo -- --section errors` runs one section (`auth`, `discovery`, `execution`, `errors`). Use
-  `--no-rate-limit` to skip the burst that exhausts the read-only key's quota for a minute.

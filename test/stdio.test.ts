@@ -16,11 +16,20 @@ const dir = mkdtempSync(path.join(tmpdir(), 'aip-stdio-'));
 const databasePath = path.join(dir, 'test.db');
 const db = openDatabase(databasePath);
 seedDatabase(db);
-const { key } = new ApiKeyService(new ApiKeyRepository(db), systemClock).create({ name: 'stdio', scopes: READ_ONLY_SCOPES });
+const { key } = new ApiKeyService(new ApiKeyRepository(db), systemClock).create({
+  name: 'stdio',
+  scopes: READ_ONLY_SCOPES,
+});
 db.close();
 
 const entrypoint = path.resolve(import.meta.dirname, '../src/stdio.ts');
-const baseEnv = { PATH: process.env.PATH ?? '', NODE_ENV: 'test', LOG_LEVEL: 'error', LOG_PRETTY: 'false', DATABASE_PATH: databasePath };
+const baseEnv = {
+  PATH: process.env.PATH ?? '',
+  NODE_ENV: 'test',
+  LOG_LEVEL: 'error',
+  LOG_PRETTY: 'false',
+  DATABASE_PATH: databasePath,
+};
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -28,7 +37,11 @@ describe('stdio transport', () => {
   it('refuses to start without a valid API key', () => {
     for (const apiKey of [undefined, 'aip_wrong_wrong_wrong_wrong_wrong']) {
       const env = apiKey ? { ...baseEnv, ACCOUNT_INTEL_API_KEY: apiKey } : baseEnv;
-      const result = spawnSync(process.execPath, ['--import', 'tsx', entrypoint], { env, encoding: 'utf8', timeout: 20_000 });
+      const result = spawnSync(process.execPath, ['--import', 'tsx', entrypoint], {
+        env,
+        encoding: 'utf8',
+        timeout: 20_000,
+      });
       expect(result.status).toBe(1);
       expect(result.stdout).toBe(''); // stdout is reserved for the protocol
       expect(result.stderr).toContain('Refusing to start');

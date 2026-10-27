@@ -19,7 +19,9 @@ export const searchContactsTool = defineTool({
       .min(2)
       .max(100)
       .optional()
-      .describe('Job title filter; every word must appear in the title (case-insensitive), e.g. "Engineer", "Head of Sales"'),
+      .describe(
+        'Job title filter; every word must appear in the title (case-insensitive), e.g. "Engineer", "Head of Sales"',
+      ),
     seniority: senioritySchema.optional().describe('Seniority band'),
     department: departmentSchema.optional().describe('Department'),
     limit: z.number().int().min(1).max(100).default(25).describe('Maximum results to return (1-100, default 25)'),

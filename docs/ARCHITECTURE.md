@@ -20,7 +20,8 @@ flowchart LR
     subgraph HTTP["Express · POST /mcp"]
       direction TB
       HV["Host header validation<br/>(DNS-rebinding guard)"] --> RL["Request logger<br/>X-Request-Id"]
-      RL --> AU["authenticate<br/>API key → Principal<br/>failed-auth IP throttle"]
+      RL --> OP["Origin policy<br/>403 unknown origins · CORS"]
+      OP --> AU["authenticate<br/>API key → Principal<br/>failed-auth IP throttle"]
       AU --> RT["Per-key rate limit<br/>429 + Retry-After"]
       RT --> SH["StreamableHTTPServerTransport<br/>(stateless, JSON responses)"]
     end
@@ -67,12 +68,12 @@ flowchart LR
   CS & KS & ES & AS --> REPO --> DB
 ```
 
-| Layer | Responsibility | Key files |
-| --- | --- | --- |
-| Transport | Wire protocol, authentication, rate limiting, logging. Knows nothing about companies. | `src/http/**`, `src/stdio.ts` |
-| MCP | Tool contracts (schemas, descriptions, annotations), discovery filtering, translating results and errors into MCP results. | `src/mcp/**` |
-| Services | Business rules: search relevance, country aliases, enrichment caching, export validation, key lifecycle. Throw typed `AppError`s. | `src/services/**`, `src/auth/apiKeyService.ts` |
-| Data | SQL only. Maps rows to domain types. | `src/repositories/**`, `src/db/**` |
+| Layer     | Responsibility                                                                                                                    | Key files                                      |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Transport | Wire protocol, authentication, rate limiting, logging. Knows nothing about companies.                                             | `src/http/**`, `src/stdio.ts`                  |
+| MCP       | Tool contracts (schemas, descriptions, annotations), discovery filtering, translating results and errors into MCP results.        | `src/mcp/**`                                   |
+| Services  | Business rules: search relevance, country aliases, enrichment caching, export validation, key lifecycle. Throw typed `AppError`s. | `src/services/**`, `src/auth/apiKeyService.ts` |
+| Data      | SQL only. Maps rows to domain types.                                                                                              | `src/repositories/**`, `src/db/**`             |
 
 ## Request lifecycle: `tools/call` over HTTP
 
@@ -88,7 +89,7 @@ sequenceDiagram
   participant D as SQLite
 
   C->>E: POST /mcp  Authorization: Bearer aip_…  {"method":"tools/call"}
-  E->>E: Host check, request id, failed-auth throttle
+  E->>E: Host check, request id, Origin check, failed-auth throttle
   E->>K: authenticate(key)
   K->>D: SELECT … WHERE key_hash = sha256(key)
   alt missing / unknown / revoked key
@@ -146,7 +147,7 @@ shows callable tools and the model is not tempted to call tools it cannot use. T
 executing, as defence in depth.
 
 **Two error channels, used deliberately.** HTTP and JSON-RPC errors are for failures the model cannot fix: bad
-credentials (401), throttling (429), malformed JSON (400 / -32700). Problems the model *can* fix, such as an unknown ID,
+credentials (401), throttling (429), malformed JSON (400 / -32700). Problems the model _can_ fix, such as an unknown ID,
 an invalid country or a malformed argument, come back as tool results with `isError: true`. The JSON body includes a
 `hint` that names the tool to call next. Unexpected exceptions are logged with their stack and returned as a generic
 `INTERNAL` error, so internals never leak.
@@ -161,9 +162,21 @@ shorthand ("AI" becomes AI, artificial intelligence, machine learning or LLM). I
 then relaxes to any term if that finds nothing. All tokens are quoted before they reach FTS5, so user input cannot inject
 query syntax.
 
+**Job titles.** Contact search matches each word at the start of a word in the title (so "eng" finds "Engineering" but
+"cto" never matches inside "Director") and expands abbreviations in both directions: "CTO" and "Chief Technology
+Officer" find the same people, as do "VP" and "Vice President". Titles where every word matches whole ("Engineer")
+rank ahead of partial matches ("VP of Engineering"), then by seniority. Industry and country filters resolve shorthand
+("AI", "U.S."), and unknown values return the valid list, so a model can correct itself in one step.
+
+**Origin validation.** The MCP spec requires servers to validate `Origin`, so that a web page cannot drive a server on
+the user's machine. Requests without an `Origin` (desktop apps, CLIs) pass; browser origins must be on `ALLOWED_HOSTS`
+(localhost by default) or `ALLOWED_ORIGINS`, and those receive CORS headers. Combined with `Host` validation this
+covers both DNS rebinding and plain cross-site requests.
+
 **Enrichment behind a port.** `ContactService` depends on the `EnrichmentProvider` interface. The bundled provider is
-deterministic, with realistic partial match rates, and supporting a real vendor means adding one class in the composition
-root. Results are persisted, so repeat calls are free (`cached: true`) and the tool is idempotent.
+deterministic, with a realistic partial match rate for phone numbers, and supporting a real vendor means adding one class in the composition
+root. Results are persisted, so repeat calls are free (`cached: true`) and the tool is idempotent; concurrent calls for the
+same contact wait on one in-flight lookup, so a burst of retries costs one provider credit.
 
 **Exports as presigned links.** A download URL authorises exactly one file until it expires, using an HMAC over the path
 and expiry, and needs no API key. Files live in SQLite to keep the project self-contained. In production they would go to
@@ -176,11 +189,11 @@ of traffic is never mistaken for brute force.
 
 ## Scaling beyond one instance
 
-| Concern | Today | Production swap |
-| --- | --- | --- |
-| Database | SQLite file (WAL) | PostgreSQL. Repositories are the only SQL; FTS5 maps to `tsvector` / `pg_trgm`. |
-| Rate-limit counters | In-memory | Shared store, e.g. `rate-limit-redis` (express-rate-limit store interface) |
-| Failed-auth counters | In-memory | Redis, or the WAF / API gateway |
-| Export files | SQLite BLOB | S3/GCS + native presigned URLs |
-| Enrichment | Simulated provider | Vendor implementation of `EnrichmentProvider` + a credit ledger per key |
-| Auth | API keys | OAuth 2.1 + PKCE via the SDK's `mcpAuthRouter` / `requireBearerAuth`; scopes map 1:1 |
+| Concern              | Today              | Production swap                                                                      |
+| -------------------- | ------------------ | ------------------------------------------------------------------------------------ |
+| Database             | SQLite file (WAL)  | PostgreSQL. Repositories are the only SQL; FTS5 maps to `tsvector` / `pg_trgm`.      |
+| Rate-limit counters  | In-memory          | Shared store, e.g. `rate-limit-redis` (express-rate-limit store interface)           |
+| Failed-auth counters | In-memory          | Redis, or the WAF / API gateway                                                      |
+| Export files         | SQLite BLOB        | S3/GCS + native presigned URLs                                                       |
+| Enrichment           | Simulated provider | Vendor implementation of `EnrichmentProvider` + a credit ledger per key              |
+| Auth                 | API keys           | OAuth 2.1 + PKCE via the SDK's `mcpAuthRouter` / `requireBearerAuth`; scopes map 1:1 |

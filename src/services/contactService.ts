@@ -22,6 +22,9 @@ export interface EnrichedContact {
 }
 
 export class ContactService {
+  /** Lookups in progress, so concurrent requests for one contact share a single provider call. */
+  private readonly inFlight = new Map<string, Promise<EnrichedContact>>();
+
   constructor(
     private readonly contacts: ContactRepository,
     private readonly companies: CompanyRepository,
@@ -38,7 +41,7 @@ export class ContactService {
     }
     return this.contacts.search({
       companyId: input.companyId,
-      titleFragments: parseJobTitle(input.jobTitle),
+      titleTerms: parseJobTitle(input.jobTitle),
       seniority: input.seniority,
       department: input.department,
       limit: input.limit,
@@ -47,28 +50,43 @@ export class ContactService {
 
   /**
    * Returns verified contact details, calling the enrichment provider only the
-   * first time. Results are persisted, so repeat calls are free and idempotent.
+   * first time. Results are persisted, so repeat calls are free and idempotent,
+   * and concurrent calls for the same contact wait for the same lookup (one
+   * provider charge, not one per request).
    */
-  async enrich(contactId: string, signal?: AbortSignal): Promise<EnrichedContact> {
+  async enrich(contactId: string): Promise<EnrichedContact> {
     const contact = this.contacts.findById(contactId);
     if (!contact) {
-      throw new NotFoundError(`Contact ${contactId} was not found`, 'Use search_contacts to look up valid contact IDs.');
+      throw new NotFoundError(
+        `Contact ${contactId} was not found`,
+        'Use search_contacts to look up valid contact IDs.',
+      );
     }
     if (contact.enrichment) return { contact, enrichment: contact.enrichment, cached: true };
 
-    const company = this.companies.findById(contact.companyId);
-    if (!company) throw new Error(`Contact ${contactId} references missing company ${contact.companyId}`);
+    const pending = this.inFlight.get(contactId);
+    if (pending) return { ...(await pending), cached: true };
 
-    const result = await this.provider.enrich(
-      {
-        contactId: contact.id,
-        firstName: contact.firstName,
-        lastName: contact.lastName,
-        companyDomain: company.domain,
-        country: company.country,
-      },
-      signal,
-    );
+    const lookup = this.lookup(contact).finally(() => this.inFlight.delete(contactId));
+    this.inFlight.set(contactId, lookup);
+    return lookup;
+  }
+
+  /**
+   * Not tied to the caller's abort signal: other requests may be waiting on
+   * this lookup, and a completed lookup is stored, so the credit is not wasted.
+   */
+  private async lookup(contact: ContactWithCompany): Promise<EnrichedContact> {
+    const company = this.companies.findById(contact.companyId);
+    if (!company) throw new Error(`Contact ${contact.id} references missing company ${contact.companyId}`);
+
+    const result = await this.provider.enrich({
+      contactId: contact.id,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      companyDomain: company.domain,
+      country: company.country,
+    });
     const enrichment: ContactEnrichment = { ...result, enrichedAt: this.clock().toISOString() };
     this.contacts.saveEnrichment(contact.id, enrichment);
     return { contact: { ...contact, enrichment }, enrichment, cached: false };

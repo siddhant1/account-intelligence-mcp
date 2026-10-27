@@ -51,7 +51,14 @@ export class ApiKeyRepository {
     this.touchStmt = db.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?');
   }
 
-  insert(input: { id: string; name: string; prefix: string; hash: string; scopes: readonly Scope[]; createdAt: string }) {
+  insert(input: {
+    id: string;
+    name: string;
+    prefix: string;
+    hash: string;
+    scopes: readonly Scope[];
+    createdAt: string;
+  }) {
     this.insertStmt.run({ ...input, scopes: input.scopes.join(' ') });
   }
 

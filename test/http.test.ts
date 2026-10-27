@@ -46,7 +46,10 @@ describe('HTTP transport', () => {
     });
 
     it('accepts Authorization: Bearer and X-API-Key', async () => {
-      const variants: Record<string, string>[] = [{ Authorization: `Bearer ${context.keys.full}` }, { 'X-API-Key': context.keys.full }];
+      const variants: Record<string, string>[] = [
+        { Authorization: `Bearer ${context.keys.full}` },
+        { 'X-API-Key': context.keys.full },
+      ];
       for (const headers of variants) {
         const client = await connect(http.baseUrl, headers);
         expect((await client.listTools()).tools).toHaveLength(5);
@@ -69,7 +72,10 @@ describe('HTTP transport', () => {
 
     beforeAll(async () => {
       const client = await connect(http.baseUrl, { 'X-API-Key': context.keys.full });
-      const result = await client.callTool({ name: 'export_contacts', arguments: { contactIds: ['cnt_1', 'cnt_2', 'cnt_1'] } });
+      const result = await client.callTool({
+        name: 'export_contacts',
+        arguments: { contactIds: ['cnt_1', 'cnt_2', 'cnt_1'] },
+      });
       await client.close();
       // The test container signs URLs for PUBLIC_BASE_URL; point them at the ephemeral test port.
       const url = new URL((result.structuredContent as { downloadUrl: string }).downloadUrl);
@@ -98,7 +104,9 @@ describe('HTTP transport', () => {
   it('rejects disallowed Host headers (DNS-rebinding protection)', async () => {
     const { request } = await import('node:http');
     const status = await new Promise<number>((resolve, reject) => {
-      const req = request(`${http.baseUrl}/health`, { headers: { Host: 'evil.example' } }, (res) => resolve(res.statusCode!));
+      const req = request(`${http.baseUrl}/health`, { headers: { Host: 'evil.example' } }, (res) =>
+        resolve(res.statusCode!),
+      );
       req.on('error', reject);
       req.end();
     });
@@ -138,9 +146,14 @@ describe('failed-authentication throttling', () => {
   it('blocks an IP after repeated bad keys, even if it then sends a valid key', async () => {
     const http = await startHttpServer(context);
     const post = (key: string) =>
-      fetch(`${http.baseUrl}/mcp`, { method: 'POST', headers: { ...JSON_HEADERS, 'X-API-Key': key }, body: LIST_TOOLS });
+      fetch(`${http.baseUrl}/mcp`, {
+        method: 'POST',
+        headers: { ...JSON_HEADERS, 'X-API-Key': key },
+        body: LIST_TOOLS,
+      });
 
-    for (let attempt = 0; attempt < 3; attempt++) expect((await post('aip_guess_guess_guess_guess_00')).status).toBe(401);
+    for (let attempt = 0; attempt < 3; attempt++)
+      expect((await post('aip_guess_guess_guess_guess_00')).status).toBe(401);
     const blocked = await post(context.keys.full);
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get('retry-after')).toBeTruthy();

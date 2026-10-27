@@ -6,6 +6,7 @@
  */
 type SeedCompany = readonly [string, string, string, string, number, number, string, string];
 
+// prettier-ignore
 export const SEED_COMPANIES: readonly SeedCompany[] = [
   // Australia
   ['Signalgrid', 'Software', 'Australia', 'Sydney', 120, 2016, 'B2B data,sales intelligence,AI,data enrichment', 'B2B data platform giving sales and marketing teams AI-powered company and contact intelligence across APAC.'],

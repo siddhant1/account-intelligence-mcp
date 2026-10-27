@@ -54,4 +54,5 @@ export interface ExportRecord {
 export const EXPORT_FORMATS = ['csv', 'json'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
-export const fullName = (contact: Pick<Contact, 'firstName' | 'lastName'>) => `${contact.firstName} ${contact.lastName}`;
+export const fullName = (contact: Pick<Contact, 'firstName' | 'lastName'>) =>
+  `${contact.firstName} ${contact.lastName}`;

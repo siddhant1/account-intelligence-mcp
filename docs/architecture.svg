@@ -41,9 +41,9 @@
 <text x="560.0" y="287.0" class="bl" text-anchor="middle">DNS-rebinding</text>
 <text x="560.0" y="303.0" class="bl" text-anchor="middle">guard</text>
 <rect x="645" y="242" width="150" height="76" rx="9" fill="#ffffff" stroke="#2563EB" stroke-width="1.6"/>
-<text x="720.0" y="269.0" class="bt" text-anchor="middle">Request logger</text>
-<text x="720.0" y="287.0" class="bl" text-anchor="middle">X-Request-Id</text>
-<text x="720.0" y="303.0" class="bl" text-anchor="middle">pino JSON logs</text>
+<text x="720.0" y="269.0" class="bt" text-anchor="middle">Logs + Origin</text>
+<text x="720.0" y="287.0" class="bl" text-anchor="middle">request IDs · pino</text>
+<text x="720.0" y="303.0" class="bl" text-anchor="middle">Origin allowlist · CORS</text>
 <rect x="805" y="242" width="150" height="76" rx="9" fill="#ffffff" stroke="#2563EB" stroke-width="1.6"/>
 <text x="880.0" y="269.0" class="bt" text-anchor="middle">API-key auth</text>
 <text x="880.0" y="287.0" class="bl" text-anchor="middle">401 + Bearer challenge</text>

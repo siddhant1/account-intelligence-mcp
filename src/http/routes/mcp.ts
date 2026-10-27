@@ -16,7 +16,11 @@ export function mcpRouter({ config, services, logger }: Container): Router {
   const router = Router();
 
   router.use(
-    authenticate({ apiKeys: services.apiKeys, failedAuth: new FailedAuthLimiter(config.rateLimit.authFailureLimit), logger }),
+    authenticate({
+      apiKeys: services.apiKeys,
+      failedAuth: new FailedAuthLimiter(config.rateLimit.authFailureLimit),
+      logger,
+    }),
     apiKeyRateLimiter(config.rateLimit, logger),
     express.json({ limit: '256kb' }),
   );

@@ -32,12 +32,17 @@ const COLUMNS = [
   ['enriched_at', (c) => c.enrichment?.enrichedAt ?? ''],
 ] as const satisfies readonly (readonly [string, (contact: ContactWithCompany) => string])[];
 
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+/** Phone numbers and other plain numbers: harmless even if a spreadsheet evaluates them. */
+const PLAIN_NUMBER = /^[+-]?[\d\s().-]+$/;
+
 /**
- * Quotes a CSV cell per RFC 4180 and neutralises spreadsheet formula
- * injection (cells starting with = + - @ are prefixed with an apostrophe).
+ * Quotes a CSV cell per RFC 4180 and neutralises spreadsheet formula injection:
+ * text starting with = + - @ is prefixed with an apostrophe so it is shown,
+ * not executed. Plain numbers such as "+61 412 345 678" are left intact.
  */
 function csvCell(value: string): string {
-  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  const safe = FORMULA_TRIGGER.test(value) && !PLAIN_NUMBER.test(value) ? `'${value}` : value;
   return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 
@@ -48,7 +53,9 @@ export function toCsv(contacts: readonly ContactWithCompany[]): string {
 }
 
 function toJson(contacts: readonly ContactWithCompany[]): string {
-  const records = contacts.map((contact) => Object.fromEntries(COLUMNS.map(([name, get]) => [name, get(contact) || null])));
+  const records = contacts.map((contact) =>
+    Object.fromEntries(COLUMNS.map(([name, get]) => [name, get(contact) || null])),
+  );
   return JSON.stringify({ contacts: records }, null, 2);
 }
 
@@ -109,7 +116,11 @@ export class ExportService {
   /** Validates a signed download link and returns the export file it points to. */
   resolveDownload(exportId: string, expires: string | undefined, signature: string | undefined): ExportRecord {
     const expiresAt = Number(expires);
-    if (!signature || !Number.isSafeInteger(expiresAt) || !this.signer.verify(`/exports/${exportId}`, expiresAt, signature)) {
+    if (
+      !signature ||
+      !Number.isSafeInteger(expiresAt) ||
+      !this.signer.verify(`/exports/${exportId}`, expiresAt, signature)
+    ) {
       throw new ForbiddenError('Invalid or missing download signature', 'Request a new link with export_contacts.');
     }
     if (expiresAt * 1000 < this.clock().getTime()) {

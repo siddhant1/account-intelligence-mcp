@@ -1,6 +1,6 @@
 import type { Db } from '../db/database.js';
 import type { Contact, ContactEnrichment, Department, Seniority } from '../domain/types.js';
-import { escapeLike } from './companyRepository.js';
+import type { TitleTerm } from '../services/search/queryParser.js';
 
 interface ContactRow {
   id: string;
@@ -25,8 +25,8 @@ export interface ContactWithCompany extends Contact {
 
 export interface ContactSearchCriteria {
   companyId?: string;
-  /** Every fragment must appear in the job title (case-insensitive). */
-  titleFragments: readonly string[];
+  /** Every term must match the start of a word in the job title (case-insensitive). */
+  titleTerms: readonly TitleTerm[];
   seniority?: Seniority;
   department?: Department;
   limit: number;
@@ -51,6 +51,28 @@ const toContact = (row: ContactRow): ContactWithCompany => ({
 const SELECT_WITH_COMPANY = `
   SELECT ct.*, c.name AS company_name
   FROM contacts ct JOIN companies c ON c.id = ct.company_id`;
+
+const WORD_START = '(?<![\\p{L}\\p{N}])';
+const WORD_END = '(?![\\p{L}\\p{N}])';
+/** Regex source for a word or phrase; phrases tolerate any whitespace between words. */
+const toRegex = (alternative: string) => alternative.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll(' ', '\\s+');
+
+/**
+ * Pattern for filtering: each alternative must start a word, so "eng" matches
+ * "Engineering" but "cto" does not match inside "Director". Abbreviations (3
+ * letters or fewer) must match a whole word.
+ */
+export function titleFilterPattern(term: TitleTerm): string {
+  const alternatives = term.map((alternative) =>
+    alternative.length <= 3 ? `${toRegex(alternative)}${WORD_END}` : toRegex(alternative),
+  );
+  return `${WORD_START}(?:${alternatives.join('|')})`;
+}
+
+/** Pattern for ranking: the whole word (singular or plural), e.g. "Engineer" but not "Engineering". */
+export function titleExactPattern(term: TitleTerm): string {
+  return `${WORD_START}(?:${term.map(toRegex).join('|')})s?${WORD_END}`;
+}
 
 /** Sort contacts by seniority (most senior first), then by id for stable pagination. */
 const SENIORITY_ORDER = `CASE ct.seniority
@@ -97,10 +119,15 @@ export class ContactRepository {
       where.push('ct.company_id = @companyId');
       params.companyId = criteria.companyId;
     }
-    criteria.titleFragments.forEach((fragment, index) => {
-      where.push(`ct.title LIKE @title${index} ESCAPE '\\'`);
-      params[`title${index}`] = `%${escapeLike(fragment)}%`;
+    const exact: string[] = [];
+    criteria.titleTerms.forEach((term, index) => {
+      where.push(`ct.title REGEXP @title${index}`);
+      params[`title${index}`] = titleFilterPattern(term);
+      exact.push(`ct.title REGEXP @exact${index}`);
+      params[`exact${index}`] = titleExactPattern(term);
     });
+    // Titles where every term is a whole word rank first: "Engineer" before "VP of Engineering".
+    const titleRank = exact.length ? `CASE WHEN ${exact.join(' AND ')} THEN 0 ELSE 1 END, ` : '';
     if (criteria.seniority) {
       where.push('ct.seniority = @seniority');
       params.seniority = criteria.seniority;
@@ -114,7 +141,7 @@ export class ContactRepository {
       SELECT ct.*, c.name AS company_name, count(*) OVER () AS total
       FROM contacts ct JOIN companies c ON c.id = ct.company_id
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY ${SENIORITY_ORDER}, ct.rowid
+      ORDER BY ${titleRank}${SENIORITY_ORDER}, ct.rowid
       LIMIT @limit`;
 
     const rows = this.db.prepare<[typeof params], ContactRow & { total: number }>(sql).all(params);

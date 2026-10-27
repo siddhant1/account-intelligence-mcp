@@ -7,10 +7,48 @@ import type { SearchTerm } from '../../repositories/companyRepository.js';
  */
 
 const STOPWORDS = new Set([
-  'a', 'an', 'and', 'any', 'are', 'at', 'based', 'best', 'business', 'businesses', 'by', 'companies', 'company',
-  'find', 'firm', 'firms', 'for', 'from', 'headquartered', 'in', 'is', 'list', 'located', 'me', 'of', 'on', 'or',
-  'organisation', 'organisations', 'organization', 'organizations', 'show', 'some', 'startup', 'startups', 'that',
-  'the', 'to', 'top', 'which', 'who', 'with',
+  'a',
+  'an',
+  'and',
+  'any',
+  'are',
+  'at',
+  'based',
+  'best',
+  'business',
+  'businesses',
+  'by',
+  'companies',
+  'company',
+  'find',
+  'firm',
+  'firms',
+  'for',
+  'from',
+  'headquartered',
+  'in',
+  'is',
+  'list',
+  'located',
+  'me',
+  'of',
+  'on',
+  'or',
+  'organisation',
+  'organisations',
+  'organization',
+  'organizations',
+  'show',
+  'some',
+  'startup',
+  'startups',
+  'that',
+  'the',
+  'to',
+  'top',
+  'which',
+  'who',
+  'with',
 ]);
 
 const SYNONYMS: Record<string, readonly string[]> = {
@@ -41,13 +79,45 @@ export function parseSearchQuery(query: string | undefined): SearchTerm[] {
 
 const TITLE_STOPWORDS = new Set(['a', 'an', 'and', 'at', 'for', 'in', 'of', 'the']);
 
+/** Title abbreviations and the phrases they stand for; matching either form finds both. */
+const TITLE_ABBREVIATIONS: Record<string, string> = {
+  ceo: 'chief executive officer',
+  cto: 'chief technology officer',
+  cfo: 'chief financial officer',
+  coo: 'chief operating officer',
+  cmo: 'chief marketing officer',
+  cro: 'chief revenue officer',
+  vp: 'vice president',
+  svp: 'senior vice president',
+  swe: 'software engineer',
+  sde: 'software engineer',
+  pm: 'product manager',
+  sdr: 'sales development representative',
+  ae: 'account executive',
+  ml: 'machine learning',
+};
+
+/** A job-title term matches when the title contains any of its alternatives (a word or a phrase). */
+export type TitleTerm = readonly string[];
+
+const singular = (token: string) =>
+  token.length > 3 && token.endsWith('s') && !token.endsWith('ss') ? token.slice(0, -1) : token;
+
 /**
- * Splits a job-title filter into fragments that must all appear in the title.
- * Plurals are reduced ("engineers" -> "engineer") so either form matches.
+ * Turns a job-title filter into terms that must all appear in the title. Plurals
+ * are reduced ("engineers" -> "engineer") and abbreviations are expanded in both
+ * directions, so "CTO" finds "Chief Technology Officer" and vice versa.
  */
-export function parseJobTitle(jobTitle: string | undefined): string[] {
+export function parseJobTitle(jobTitle: string | undefined): TitleTerm[] {
   if (!jobTitle) return [];
-  return [...new Set(tokenize(jobTitle))]
-    .filter((token) => !TITLE_STOPWORDS.has(token))
-    .map((token) => (token.length > 3 && token.endsWith('s') && !token.endsWith('ss') ? token.slice(0, -1) : token));
+  let text = ` ${tokenize(jobTitle).join(' ')} `;
+  // Collapse spelled-out phrases to their abbreviation first, so they expand to both forms below.
+  for (const [abbreviation, phrase] of Object.entries(TITLE_ABBREVIATIONS)) {
+    text = text.replaceAll(` ${phrase} `, ` ${abbreviation} `);
+  }
+  const tokens = [...new Set(text.trim().split(' ').filter(Boolean))].filter((token) => !TITLE_STOPWORDS.has(token));
+  return tokens.map((token) => {
+    const abbreviation = TITLE_ABBREVIATIONS[token];
+    return abbreviation ? [token, abbreviation] : [singular(token)];
+  });
 }

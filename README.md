@@ -1,5 +1,7 @@
 # Account Intelligence MCP Server
 
+[![CI](https://github.com/siddhant1/account-intelligence-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/siddhant1/account-intelligence-mcp/actions/workflows/ci.yml)
+
 An [MCP](https://modelcontextprotocol.io) server for an Account Intelligence Platform. AI clients such as Claude
 Desktop, Cursor, VS Code or any custom MCP client can **search companies, look up company details, find contacts,
 enrich them with email/LinkedIn, and export results** as a downloadable file.
@@ -23,13 +25,30 @@ Built with Node.js, TypeScript (strict), the official MCP TypeScript SDK, Expres
 - **Structured logging** (pino) with request IDs, the API key ID, the tool name and timings. Secrets are redacted and
   logs go to stderr, so they can never corrupt the stdio protocol stream.
 - **Relevance-ranked search**: SQLite FTS5 with BM25 ranking, stemming, filler-word removal ("AI companies in Australia")
-  and synonym expansion ("AI" also matches machine learning and LLM).
+  and synonym expansion ("AI" also matches machine learning and LLM). Filters accept what models actually send:
+  `industry: "AI"`, `country: "U.S."`, `jobTitle: "CTO"` (finds _Chief Technology Officer_, and vice versa).
 - **Signed, expiring download links** for exports (HMAC, like S3 presigned URLs), with CSV formula-injection protection.
-- **39 tests** covering services, the MCP protocol in-process, HTTP end to end (auth, rate limits, downloads, DNS-rebinding
-  protection) and the stdio process.
+- **Browser safety per the MCP spec**: `Origin` validation (unknown origins get `403`), CORS for allow-listed browser
+  clients, and `Host` validation against DNS rebinding.
+- **86 tests** across services, the MCP protocol in-process, HTTP end to end, the stdio process, the CLI and hostile
+  input, plus strict TypeScript, ESLint, Prettier and CI on Node 22 and 24 (`npm run check`).
+- **Verified with a real model**: Claude completed a multi-step prospecting task through the server using only tool
+  discovery ([transcript](docs/demo/llm-session.md)).
+
+## Deliverables
+
+| Requested                                 | Where                                                                                                                                                                       |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source code repository                    | This repository: [`src/`](src), tests in [`test/`](test)                                                                                                                    |
+| README with setup instructions            | This file: [Quick start](#quick-start) and [Connect an MCP client](#connect-an-mcp-client)                                                                                  |
+| Architecture diagram                      | [`docs/architecture.png`](docs/architecture.png), with request flows and design decisions in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)                                 |
+| Demo (discovery, execution, auth, errors) | Screenshots and transcript in [`docs/demo/`](docs/demo), a real-model session in [`docs/demo/llm-session.md`](docs/demo/llm-session.md), and `npm run demo` to reproduce it |
+| Example MCP client configuration          | [`examples/`](examples): Claude Desktop (stdio and remote), Cursor, VS Code, plus a curl walkthrough                                                                        |
+| Tool reference                            | [`docs/TOOLS.md`](docs/TOOLS.md), generated from the code                                                                                                                   |
 
 ## Contents
 
+- [Deliverables](#deliverables)
 - [Quick start](#quick-start)
 - [Connect an MCP client](#connect-an-mcp-client)
 - [Tools](#tools)
@@ -45,7 +64,7 @@ Built with Node.js, TypeScript (strict), the official MCP TypeScript SDK, Expres
 
 ## Quick start
 
-Requires **Node.js 20.12+** (developed on Node 24).
+Requires **Node.js 22+** (developed on Node 24; `better-sqlite3` 13 needs 22 or later).
 
 ```bash
 npm install
@@ -74,15 +93,15 @@ The seed script refuses to run when `NODE_ENV=production`. To create real keys, 
 Copy-ready configurations are in [`examples/`](examples). Replace the placeholder with an API key, for example
 `DEV_API_KEY` from your `.env`.
 
-| Client | Transport | Config |
-| --- | --- | --- |
-| Claude Desktop (local) | stdio | [`examples/claude_desktop_config.json`](examples/claude_desktop_config.json) |
-| Claude Desktop (remote server) | HTTP via `mcp-remote` | [`examples/claude_desktop_config.remote.json`](examples/claude_desktop_config.remote.json) |
-| Cursor | HTTP | [`examples/cursor.mcp.json`](examples/cursor.mcp.json) → `.cursor/mcp.json` |
-| VS Code (Copilot agent mode) | HTTP | [`examples/vscode.mcp.json`](examples/vscode.mcp.json) → `.vscode/mcp.json` (prompts for the key) |
-| Claude Code | HTTP | `claude mcp add --transport http account-intelligence http://localhost:3100/mcp --header "Authorization: Bearer $ACCOUNT_INTEL_API_KEY"` |
-| MCP Inspector | HTTP | `npm run inspector`, then choose *Streamable HTTP*, URL `http://localhost:3100/mcp`, header `Authorization: Bearer <key>` |
-| Custom client | HTTP | [`scripts/demo-client.ts`](scripts/demo-client.ts) (`npm run demo`) |
+| Client                         | Transport             | Config                                                                                                                                   |
+| ------------------------------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Desktop (local)         | stdio                 | [`examples/claude_desktop_config.json`](examples/claude_desktop_config.json)                                                             |
+| Claude Desktop (remote server) | HTTP via `mcp-remote` | [`examples/claude_desktop_config.remote.json`](examples/claude_desktop_config.remote.json)                                               |
+| Cursor                         | HTTP                  | [`examples/cursor.mcp.json`](examples/cursor.mcp.json) → `.cursor/mcp.json`                                                              |
+| VS Code (Copilot agent mode)   | HTTP                  | [`examples/vscode.mcp.json`](examples/vscode.mcp.json) → `.vscode/mcp.json` (prompts for the key)                                        |
+| Claude Code                    | HTTP                  | `claude mcp add --transport http account-intelligence http://localhost:3100/mcp --header "Authorization: Bearer $ACCOUNT_INTEL_API_KEY"` |
+| MCP Inspector                  | HTTP                  | `npm run inspector`, then choose _Streamable HTTP_, URL `http://localhost:3100/mcp`, header `Authorization: Bearer <key>`                |
+| Custom client                  | HTTP                  | [`scripts/demo-client.ts`](scripts/demo-client.ts) (`npm run demo`)                                                                      |
 
 **Claude Desktop, local mode.** Run `npm run build` first. Claude Desktop does not inherit your shell's `PATH` (for
 example nvm), so use absolute paths: `which node` gives the `command`, and `args` points to `dist/stdio.js` in this
@@ -93,18 +112,18 @@ from the project root, so the working directory Claude Desktop uses does not mat
 **Claude Desktop, remote mode** uses [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) to bridge stdio to the HTTP
 endpoint with your key as a header. This configuration was verified against the running server.
 
-Try a prompt such as: *"Find AI companies in Australia, pick the most relevant one, find its engineers, enrich the most
-senior one and export them all to CSV."*
+Try a prompt such as: _"Find AI companies in Australia, pick the most relevant one, find its engineers, enrich the most
+senior one and export them all to CSV."_
 
 ## Tools
 
-| Tool | Purpose | Scope | Hints |
-| --- | --- | --- | --- |
-| `search_companies` | Free-text and filtered company search (`query`, `country`, `industry`, `minEmployees`, `maxEmployees`, `limit`) | `companies:read` | read-only, idempotent |
-| `get_company` | Full company profile, including the number of contacts on file | `companies:read` | read-only, idempotent |
-| `search_contacts` | People by `companyId`, `jobTitle`, `seniority`, `department`; most senior first | `contacts:read` | read-only, idempotent |
-| `enrich_contact` | Email, LinkedIn and phone from the enrichment provider; stored for later calls | `contacts:enrich` | idempotent, open-world |
-| `export_contacts` | CSV/JSON export, returns a signed `downloadUrl` that expires after 15 minutes | `contacts:export` | creates a file |
+| Tool               | Purpose                                                                                                                                                                                               | Scope             | Hints                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ---------------------- |
+| `search_companies` | Free-text and filtered search (`query`, `country`, `industry`, `minEmployees`, `maxEmployees`, `limit`); `industry` accepts shorthand such as "AI" or "tech"                                          | `companies:read`  | read-only, idempotent  |
+| `get_company`      | Full company profile, including the number of contacts on file                                                                                                                                        | `companies:read`  | read-only, idempotent  |
+| `search_contacts`  | People by `companyId`, `jobTitle`, `seniority`, `department`. Titles match whole words and abbreviations (CTO ↔ Chief Technology Officer, VP ↔ Vice President); exact matches first, then most senior | `contacts:read`   | read-only, idempotent  |
+| `enrich_contact`   | Email, LinkedIn and phone from the enrichment provider; stored, and concurrent requests share one lookup                                                                                              | `contacts:enrich` | idempotent, open-world |
+| `export_contacts`  | CSV/JSON export, returns a signed `downloadUrl` that expires after 15 minutes                                                                                                                         | `contacts:export` | creates a file         |
 
 Outputs are a superset of the specification. For example, `search_companies` returns
 `{ results: [{ id, name, industry, employees, country, city }], total }`. The full reference, with JSON Schemas and real
@@ -112,10 +131,12 @@ example calls, is in **[docs/TOOLS.md](docs/TOOLS.md)** (generated with `npm run
 code).
 
 Also exposed:
+
 - **Resources**: `account-intel://companies/{companyId}`, one JSON profile per company (listable).
 - **Prompt**: `build_prospect_list(role, segment, country?)`, which runs the whole workflow. It adapts to the key's
   scopes, so a read-only key produces a table instead of an export.
-- **Server instructions**: a short workflow guide that clients pass to the model at initialization.
+- **Server instructions**: a short workflow guide, plus the dataset's countries and industries, that clients pass to
+  the model at initialization.
 
 ## Authentication
 
@@ -126,12 +147,12 @@ Authorization: Bearer aip_...      (preferred)
 X-API-Key: aip_...                 (alternative)
 ```
 
-| Situation | Response |
-| --- | --- |
-| No key | `401` · `WWW-Authenticate: Bearer realm="account-intelligence-mcp"` · JSON-RPC error `-32001` |
-| Unknown, malformed or revoked key | `401` · `WWW-Authenticate: Bearer …, error="invalid_token"` |
-| Too many failed attempts from one IP (default 20 per 15 min) | `429` + `Retry-After`, even if the next key is valid |
-| Valid key | The request proceeds with the key's scopes. `tools/list` shows only the tools those scopes allow. |
+| Situation                                                    | Response                                                                                          |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| No key                                                       | `401` · `WWW-Authenticate: Bearer realm="account-intelligence-mcp"` · JSON-RPC error `-32001`     |
+| Unknown, malformed or revoked key                            | `401` · `WWW-Authenticate: Bearer …, error="invalid_token"`                                       |
+| Too many failed attempts from one IP (default 20 per 15 min) | `429` + `Retry-After`, even if the next key is valid                                              |
+| Valid key                                                    | The request proceeds with the key's scopes. `tools/list` shows only the tools those scopes allow. |
 
 **stdio transport:** the key comes from `ACCOUNT_INTEL_API_KEY`. It is verified before the server starts, and the
 process exits with an error if the key is missing, invalid or revoked.
@@ -142,6 +163,11 @@ executing, as defence in depth.
 
 **Storage:** keys are 192-bit random secrets. Only their SHA-256 digest and a 12-character display prefix are stored;
 the plaintext is shown once at creation. Keys record `last_used_at` and can be revoked.
+
+**Browsers:** requests that carry an `Origin` header (that is, from a web page) are rejected with `403` unless the
+origin's host is in `ALLOWED_HOSTS` or the origin is listed in `ALLOWED_ORIGINS`, as the MCP spec requires. Allowed
+origins get CORS headers, so browser-based clients such as the MCP Inspector's direct mode work. Desktop apps and CLIs
+send no `Origin` and are unaffected.
 
 **Export downloads** do not need an API key: the link itself is the credential. An HMAC signature over the path and
 expiry is checked in constant time. A modified link returns `403` and an expired one returns `410`.
@@ -159,21 +185,29 @@ npm run keys -- revoke key_1a2b3c4d5e6f
 Errors use two channels, chosen by who can fix the problem:
 
 1. **Transport and protocol errors** (HTTP status + JSON-RPC error) for problems the model cannot fix: `401` auth,
-   `429` rate limit, `400` malformed JSON (`-32700`), `403` disallowed `Host` header, `405` on `GET`/`DELETE /mcp`.
-2. **Tool errors** (`isError: true` in the tool result) for problems the model *can* fix. The model sees the message and
+   `429` rate limit, `400` malformed JSON (`-32700`), `403` disallowed `Host` or `Origin` header, `405` on
+   `GET`/`DELETE /mcp`, and the transport's own `406`/`415`/`400` for a wrong `Accept`, `Content-Type` or
+   `MCP-Protocol-Version`.
+2. **Tool errors** (`isError: true` in the tool result) for problems the model _can_ fix. The model sees the message and
    can retry:
 
 ```json
-{ "error": { "code": "NOT_FOUND", "message": "Company cmp_9999 was not found", "hint": "Use search_companies to look up valid company IDs." } }
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Company cmp_9999 was not found",
+    "hint": "Use search_companies to look up valid company IDs."
+  }
+}
 ```
 
-| Code | Example |
-| --- | --- |
-| Schema validation (SDK) | `Input validation error: … must be a company ID such as "cmp_1" at companyId` |
-| `INVALID_ARGUMENT` | Unknown country (the hint lists valid ones); `minEmployees` > `maxEmployees` |
-| `NOT_FOUND` | Unknown company or contact. An export with any unknown ID is rejected as a whole and lists `missingIds`. |
-| `FORBIDDEN` | Missing scope (defence in depth) |
-| `INTERNAL` | Anything unexpected. The stack trace is logged; the client receives a generic message. |
+| Code                    | Example                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| Schema validation (SDK) | `Input validation error: … must be a company ID such as "cmp_1" at companyId`                            |
+| `INVALID_ARGUMENT`      | Unknown country or industry (the hint lists valid ones); `minEmployees` > `maxEmployees`                 |
+| `NOT_FOUND`             | Unknown company or contact. An export with any unknown ID is rejected as a whole and lists `missingIds`. |
+| `FORBIDDEN`             | Missing scope (defence in depth)                                                                         |
+| `INTERNAL`              | Anything unexpected. The stack trace is logged; the client receives a generic message.                   |
 
 Domain code throws typed `AppError`s ([`src/domain/errors.ts`](src/domain/errors.ts)). The MCP adapter
 ([`src/mcp/registerTool.ts`](src/mcp/registerTool.ts)) and the HTTP adapter ([`src/http/errors.ts`](src/http/errors.ts))
@@ -184,7 +218,7 @@ translate them for their channel.
 - **Per-key quota:** 120 requests per minute by default (`RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`). Responses carry
   `RateLimit` and `RateLimit-Policy` headers (IETF draft 8); once the quota is used up, the server returns `429` with
   `Retry-After` and a JSON-RPC error. Each key has its own budget, so one noisy client cannot exhaust another's.
-- **Failed-auth throttle:** only *failures* count toward the per-IP limit, so a burst of legitimate traffic is never
+- **Failed-auth throttle:** only _failures_ count toward the per-IP limit, so a burst of legitimate traffic is never
   mistaken for brute force.
 - **Logs** are JSON lines on stderr (pretty-printed in development). Each request logs `requestId` (from a well-formed
   incoming `X-Request-Id`, otherwise generated, and echoed back), method, path, status, duration, `apiKeyId`, JSON-RPC
@@ -209,13 +243,14 @@ and `cnt_3` in the docs and demo always refer to the same records. All companies
 domain uses the reserved `.example` TLD.
 
 Enrichment goes through an `EnrichmentProvider` interface. The bundled `SimulatedEnrichmentProvider` is deterministic,
-uses one email pattern per company, finds a LinkedIn profile for about 90% of contacts and a phone number for about two
-thirds, and adds configurable latency. A real vendor can replace it without touching the services.
+uses one email pattern per company, always returns an email and LinkedIn profile, finds a phone number for about two
+thirds of contacts, and adds configurable latency. A real vendor can replace it without touching the services.
+Concurrent requests to enrich the same contact share one provider call, so one lookup is never billed twice.
 
 ## Architecture
 
 ```text
-Clients ─▶ Transport (stdio | Express: host check → logging → auth → rate limit → Streamable HTTP)
+Clients ─▶ Transport (stdio | Express: Host check → logging → Origin/CORS → auth → rate limit → Streamable HTTP)
         ─▶ MCP layer (per-principal server, scope-filtered tools, schemas, error mapping)
         ─▶ Services (search, contacts + enrichment port, exports + URL signer, API keys)
         ─▶ Repositories ─▶ SQLite (FTS5)
@@ -250,35 +285,45 @@ docs/                         TOOLS.md (generated), ARCHITECTURE.md, diagram, de
 All settings come from environment variables (or `.env` in the project root) and are validated with Zod at startup. An
 invalid configuration fails fast with a readable message.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PORT` / `HOST` | `3100` / `127.0.0.1` | HTTP bind address |
-| `PUBLIC_BASE_URL` | `http://localhost:$PORT` | Base URL used in export download links |
-| `ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | Accepted `Host` headers (DNS-rebinding protection) |
-| `TRUST_PROXY` | `false` | Trust `X-Forwarded-For` (behind a load balancer) |
-| `DATABASE_PATH` | `./data/account-intel.db` | SQLite file, resolved from the project root |
-| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | `120` / `60000` | Per-key request quota |
-| `AUTH_FAILURE_LIMIT` | `20` | Failed auth attempts per IP per 15 minutes |
-| `EXPORT_URL_TTL_SECONDS` | `900` | Download link lifetime |
-| `EXPORT_SIGNING_SECRET` | dev value | HMAC secret; **required** (32+ characters) in production |
-| `ENRICHMENT_LATENCY_MS` | `150` | Simulated provider latency |
-| `LOG_LEVEL` / `LOG_PRETTY` | `info` / `true` in development | Logging |
-| `ACCOUNT_INTEL_API_KEY` | none | API key for the stdio transport and the demo client |
+| Variable                                  | Default                                      | Purpose                                                                                        |
+| ----------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `PORT` / `HOST`                           | `3100` / `127.0.0.1`                         | HTTP bind address                                                                              |
+| `PUBLIC_BASE_URL`                         | `http://localhost:$PORT`                     | Base URL used in export download links                                                         |
+| `ALLOWED_HOSTS`                           | `localhost,127.0.0.1,[::1]`                  | Accepted `Host` headers (DNS-rebinding protection); browser origins on these hosts are allowed |
+| `ALLOWED_ORIGINS`                         | none                                         | Extra browser origins allowed to call the server (CORS), e.g. `https://inspector.example.com`  |
+| `TRUST_PROXY`                             | `false`                                      | Trust `X-Forwarded-For` (behind a load balancer)                                               |
+| `DATABASE_PATH`                           | `./data/account-intel.db`                    | SQLite file, resolved from the project root                                                    |
+| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | `120` / `60000`                              | Per-key request quota                                                                          |
+| `AUTH_FAILURE_LIMIT`                      | `20`                                         | Failed auth attempts per IP per 15 minutes                                                     |
+| `EXPORT_URL_TTL_SECONDS`                  | `900`                                        | Download link lifetime                                                                         |
+| `EXPORT_SIGNING_SECRET`                   | dev value                                    | HMAC secret; **required** (32+ characters) in production                                       |
+| `ENRICHMENT_LATENCY_MS`                   | `150`                                        | Simulated provider latency                                                                     |
+| `LOG_LEVEL` / `LOG_PRETTY`                | `info` / pretty in development at a terminal | Logging; falls back to JSON if `pino-pretty` is not installed                                  |
+| `ACCOUNT_INTEL_API_KEY`                   | none                                         | API key for the stdio transport and the demo client                                            |
 
 ## Testing
 
 ```bash
-npm test            # 39 tests, about 3 seconds
-npm run typecheck   # strict TypeScript, including tests and scripts
+npm run check           # what CI runs: typecheck + lint + format check + 86 tests (about 10 seconds)
+npm test                # tests only
+npm run test:coverage   # coverage report (about 80% of src; entrypoints run as subprocesses in tests)
+npm run lint            # ESLint (typescript-eslint)
+npm run format          # Prettier
 ```
 
-| Suite | Covers |
-| --- | --- |
-| `test/services.test.ts` | Query parsing, search relevance, country aliases, AND→OR fallback, FTS injection safety, enrichment caching, export validation, CSV escaping |
-| `test/mcp.test.ts` | Real SDK client over an in-memory transport: discovery, schemas, annotations, `structuredContent`, the full workflow, validation and domain errors, resources, prompt, scope filtering |
-| `test/http.test.ts` | Real HTTP server: 401 challenges, both header styles, revocation, signed downloads and tampering, Host validation, malformed JSON, per-key 429 with headers, failed-auth throttling |
-| `test/stdio.test.ts` | Spawns the stdio entrypoint: exits without a valid key and never writes to stdout; serves scoped tools with one |
-| `test/seed.test.ts` | Dataset size, determinism, invariants |
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `npm run check` and the build on Node 22 and 24, and
+fails if `docs/TOOLS.md` is out of date with the code.
+
+| Suite                         | Covers                                                                                                                                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test/services.test.ts`       | Query parsing, search relevance, country aliases, AND→OR fallback, FTS injection safety, enrichment caching, export validation, CSV escaping                                                       |
+| `test/mcp.test.ts`            | Real SDK client over an in-memory transport: discovery, schemas, annotations, `structuredContent`, the full workflow, validation and domain errors, resources, prompt, scope filtering             |
+| `test/http.test.ts`           | Real HTTP server: 401 challenges, both header styles, revocation, signed downloads and tampering, Host validation, malformed JSON, per-key 429 with headers, failed-auth throttling                |
+| `test/stdio.test.ts`          | Spawns the stdio entrypoint: exits without a valid key and never writes to stdout; serves scoped tools with one                                                                                    |
+| `test/seed.test.ts`           | Dataset size, determinism, invariants                                                                                                                                                              |
+| `test/audit-fixes.test.ts`    | Regressions from the adversarial audit: title abbreviations and ranking, industry and country resolution, concurrent enrichment, CSV phone numbers, `last_used_at` throttling                      |
+| `test/http-hardening.test.ts` | Origin validation and CORS, link expiry (410), JSON-RPC edge cases (unknown method, notifications, batch), transport rules (406/415/400/413), SQL and FTS injection, malformed and oversized input |
+| `test/cli-config.test.ts`     | Seed and key-management CLIs (create, list, revoke; plaintext shown once), configuration validation and production guards                                                                          |
 
 ## Demo
 
@@ -287,6 +332,8 @@ npm run typecheck   # strict TypeScript, including tests and scripts
   [tool execution](docs/demo/03-tool-execution.png) · [error handling](docs/demo/04-error-handling.png) ·
   [server logs](docs/demo/05-server-logs.png). The full transcript is in
   [`docs/demo/demo-output.txt`](docs/demo/demo-output.txt).
+- **Real model:** [`docs/demo/llm-session.md`](docs/demo/llm-session.md), Claude completing a five-part prospecting
+  task through the server with no hints beyond tool discovery.
 - **Video script:** [`docs/demo/VIDEO_SCRIPT.md`](docs/demo/VIDEO_SCRIPT.md), a 5-minute walkthrough that uses Claude
   Desktop and the demo client.
 - `npm run demo -- --section errors` runs one section (`auth`, `discovery`, `execution`, `errors`). Use
@@ -303,6 +350,8 @@ npm run typecheck   # strict TypeScript, including tests and scripts
 - **Single-instance state:** rate-limit counters, failed-auth counters and export files are local. For several replicas,
   plug in Redis (express-rate-limit store) and object storage with native presigned URLs. MCP itself is already
   stateless.
+- **Enrichment de-duplication** is per process. With several replicas, a unique "enrichment job" row (or an advisory
+  lock) per contact gives the same one-lookup guarantee.
 - **Enrichment credits:** a per-key credit ledger and a `dryRun`/cost preview are natural additions before connecting a
   paid vendor.
 - **Pagination:** searches return `total`, so a `cursor` parameter would be an additive change.

@@ -40,14 +40,20 @@ const EMAIL_PATTERNS = [
   (first: string) => first,
 ] as const;
 
-const slug = (value: string) => value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const slug = (value: string) =>
+  value
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 
 /**
  * Deterministic stand-in for a real enrichment vendor. Each company uses one
- * email pattern, and some contacts have no LinkedIn profile or phone number,
- * so clients have to handle partial results just as they would in production.
+ * email pattern. Every contact gets an email and LinkedIn profile (the fields
+ * the API contract promises); about a third have no phone number, so clients
+ * still have to handle partial results as they would with a real vendor.
  */
 export class SimulatedEnrichmentProvider implements EnrichmentProvider {
   readonly name = 'simulated';
@@ -62,15 +68,12 @@ export class SimulatedEnrichmentProvider implements EnrichmentProvider {
     const contactHash = digest(request.contactId);
     const pattern = EMAIL_PATTERNS[digest(request.companyDomain)[0]! % EMAIL_PATTERNS.length]!;
 
-    const hasLinkedin = contactHash[0]! % 10 !== 0; // ~90% match rate
     const hasPhone = contactHash[1]! % 3 !== 0; // ~66% match rate
     const phoneDigits = Array.from(contactHash.subarray(2, 11), (byte) => byte % 10).join('');
 
     return {
       email: `${pattern(first, last)}@${request.companyDomain}`,
-      linkedin: hasLinkedin
-        ? `https://www.linkedin.com/in/${first}-${last}-${contactHash.subarray(12, 15).toString('hex')}`
-        : null,
+      linkedin: `https://www.linkedin.com/in/${first}-${last}-${contactHash.subarray(12, 15).toString('hex')}`,
       phone: hasPhone ? `${DIALING_CODES[request.country] ?? '+1'} ${phoneDigits}` : null,
     };
   }

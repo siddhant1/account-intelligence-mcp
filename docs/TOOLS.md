@@ -30,8 +30,8 @@ Contents: [`search_companies`](#search_companies) · [`get_company`](#get_compan
 | Field | Type | Required | Constraints | Description |
 | --- | --- | --- | --- | --- |
 | `query` | string | no | 1-200 chars | Free-text query, e.g. "AI companies", "payments", "computer vision". Omit to list by size. |
-| `country` | string | no | 2-60 chars | Country name or ISO code, e.g. "Australia" or "AU" |
-| `industry` | string | no | 2-60 chars | Industry filter (partial, case-insensitive), e.g. "Fintech", "Healthcare", "Artificial Intelligence" |
+| `country` | string | no | 2-60 chars | Country name or code, e.g. "Australia", "AU", "U.S.". Unknown values return the valid list. |
+| `industry` | string | no | 2-60 chars | Industry name or shorthand, e.g. "Fintech", "Healthcare", "AI" (= Artificial Intelligence), "tech" (all *tech industries). Unknown values return the valid list. |
 | `minEmployees` | integer | no | ≥ 1 | Minimum headcount (inclusive) |
 | `maxEmployees` | integer | no | ≥ 1 | Maximum headcount (inclusive) |
 | `limit` | integer | no | ≥ 1, ≤ 50, default `10` | Maximum results to return (1-50, default 10) |
@@ -422,7 +422,7 @@ Contents: [`search_companies`](#search_companies) · [`get_company`](#get_compan
 
 ## `enrich_contact`
 
-**Enrich contact**: Look up verified contact details (work email, LinkedIn profile, phone) for one contact through the enrichment provider. Results are saved, so repeat calls for the same contact return the stored data. LinkedIn and phone can be null when the provider has no match. Only enrich contacts the user actually needs.
+**Enrich contact**: Look up verified contact details (work email, LinkedIn profile, phone) for one contact through the enrichment provider. Results are saved, so repeat calls for the same contact return the stored data. Phone can be null when the provider has no match. Only enrich contacts the user actually needs.
 
 - Required scope: `contacts:enrich`
 - Annotations: `readOnlyHint: false` · `destructiveHint: false` · `idempotentHint: true` · `openWorldHint: true`
@@ -467,21 +467,17 @@ Contents: [`search_companies`](#search_companies) · [`get_company`](#get_compan
     },
     "email": {
       "type": "string",
-      "format": "email",
-      "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+      "description": "Work email address"
     },
     "linkedin": {
-      "anyOf": [
-        {
-          "type": "string",
-          "format": "uri"
-        },
-        {
-          "type": "null"
-        }
+      "description": "LinkedIn profile URL",
+      "type": [
+        "string",
+        "null"
       ]
     },
     "phone": {
+      "description": "Phone number in international format, or null if not found",
       "type": [
         "string",
         "null"
@@ -489,8 +485,7 @@ Contents: [`search_companies`](#search_companies) · [`get_company`](#get_compan
     },
     "enrichedAt": {
       "type": "string",
-      "format": "date-time",
-      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+      "description": "When the contact was enriched (ISO 8601, UTC)"
     },
     "cached": {
       "type": "boolean",
@@ -541,7 +536,13 @@ Contents: [`search_companies`](#search_companies) · [`get_company`](#get_compan
 }
 
 // structuredContent of the result
-
+{
+  "exportId": "exp_EXAMPLE",
+  "downloadUrl": "http://localhost:3100/exports/exp_EXAMPLE?expires=1768470300&signature=EXAMPLE",
+  "format": "csv",
+  "contactCount": 2,
+  "expiresAt": "2026-01-15T09:45:00.000Z"
+}
 ```
 
 <details><summary>Output JSON Schema</summary>
@@ -572,9 +573,7 @@ Contents: [`search_companies`](#search_companies) · [`get_company`](#get_compan
     },
     "expiresAt": {
       "type": "string",
-      "format": "date-time",
-      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
-      "description": "When the download link stops working"
+      "description": "When the download link stops working (ISO 8601, UTC)"
     }
   },
   "required": [

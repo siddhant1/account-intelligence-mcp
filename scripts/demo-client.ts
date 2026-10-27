@@ -36,15 +36,19 @@ const step = (title: string) => console.log(`${pc.bold(pc.cyan('▶'))} ${pc.bol
 const note = (text: string) => console.log(pc.dim(`  ${text}`));
 const ok = (text: string) => console.log(`  ${pc.green('✔')} ${text}`);
 const rejected = (text: string) => console.log(`  ${pc.red('✖')} ${text}`);
-const call = (tool: string, input: unknown) => console.log(`  ${pc.yellow('→')} ${pc.yellow(tool)} ${pc.dim(JSON.stringify(input))}`);
+const call = (tool: string, input: unknown) =>
+  console.log(`  ${pc.yellow('→')} ${pc.yellow(tool)} ${pc.dim(JSON.stringify(input))}`);
 const json = (value: unknown, maxLines = 24) => {
   const lines = JSON.stringify(value, null, 2).split('\n');
-  const shown = lines.length > maxLines ? [...lines.slice(0, maxLines), `… (${lines.length - maxLines} more lines)`] : lines;
+  const shown =
+    lines.length > maxLines ? [...lines.slice(0, maxLines), `… (${lines.length - maxLines} more lines)`] : lines;
   console.log(shown.map((line) => `    ${pc.gray(line)}`).join('\n'));
 };
 
 function table(rows: Record<string, unknown>[], columns: string[]) {
-  const widths = columns.map((column) => Math.max(column.length, ...rows.map((row) => String(row[column] ?? '').length)));
+  const widths = columns.map((column) =>
+    Math.max(column.length, ...rows.map((row) => String(row[column] ?? '').length)),
+  );
   const line = (cells: string[]) => `    ${cells.map((cell, index) => cell.padEnd(widths[index]!)).join('  ')}`;
   console.log(pc.bold(line(columns)));
   for (const row of rows) console.log(line(columns.map((column) => String(row[column] ?? ''))));
@@ -129,7 +133,10 @@ async function discovery() {
         Object.keys(tool.inputSchema.properties ?? {})
           .filter((key) => !(tool.inputSchema.required ?? []).includes(key))
           .join(', ') || '-',
-      hints: [tool.annotations?.readOnlyHint ? 'read-only' : 'writes', tool.annotations?.openWorldHint ? 'external' : '']
+      hints: [
+        tool.annotations?.readOnlyHint ? 'read-only' : 'writes',
+        tool.annotations?.openWorldHint ? 'external' : '',
+      ]
         .filter(Boolean)
         .join(', '),
     })),
@@ -139,7 +146,14 @@ async function discovery() {
   step('Input and output schema of search_companies (JSON Schema generated from Zod)');
   const search = tools.find((tool) => tool.name === 'search_companies')!;
   note(search.description ?? '');
-  type Property = { type?: string; description?: string; minimum?: number; maximum?: number; maxLength?: number; default?: unknown };
+  type Property = {
+    type?: string;
+    description?: string;
+    minimum?: number;
+    maximum?: number;
+    maxLength?: number;
+    default?: unknown;
+  };
   const properties = Object.entries((search.inputSchema.properties ?? {}) as Record<string, Property>);
   table(
     properties.map(([name, schema]) => ({
@@ -184,6 +198,16 @@ async function execution() {
   table(results, ['id', 'name', 'industry', 'employees', 'city']);
   note(`${results.length} of ${total} matches`);
 
+  step('Filters: industry shorthand ("AI" = Artificial Intelligence) and headcount range');
+  const filtered = await invoke(client, 'search_companies', { industry: 'AI', minEmployees: 100, maxEmployees: 300 });
+  table((filtered.structuredContent as { results: Record<string, unknown>[] }).results, [
+    'id',
+    'name',
+    'industry',
+    'employees',
+    'country',
+  ]);
+
   step('Get company details');
   const companyId = 'cmp_1';
   const company = await invoke(client, 'get_company', { companyId });
@@ -193,6 +217,15 @@ async function execution() {
   const contacts = await invoke(client, 'search_contacts', { companyId, jobTitle: 'Engineer' });
   const found = (contacts.structuredContent as { contacts: Record<string, unknown>[] }).contacts;
   table(found, ['id', 'name', 'title', 'seniority', 'enriched']);
+
+  step('Title abbreviations work both ways ("CTO" finds "Chief Technology Officer")');
+  const ctos = await invoke(client, 'search_contacts', { companyId: 'cmp_2', jobTitle: 'CTO' });
+  table((ctos.structuredContent as { contacts: Record<string, unknown>[] }).contacts, [
+    'id',
+    'name',
+    'title',
+    'companyName',
+  ]);
 
   step('Enrich contact');
   const contactId = String(found[0]!.id);
@@ -209,9 +242,12 @@ async function execution() {
   step('Download the export via its signed URL (no API key needed)');
   const { downloadUrl } = exported.structuredContent as { downloadUrl: string };
   const download = await fetch(downloadUrl);
-  ok(`HTTP ${download.status} · ${download.headers.get('content-type')} · ${download.headers.get('content-disposition')}`);
+  ok(
+    `HTTP ${download.status} · ${download.headers.get('content-type')} · ${download.headers.get('content-disposition')}`,
+  );
   const lines = (await download.text()).trim().split('\r\n');
-  for (const line of lines.slice(0, 4)) console.log(`    ${pc.gray(line.length > 110 ? `${line.slice(0, 110)}…` : line)}`);
+  for (const line of lines.slice(0, 4))
+    console.log(`    ${pc.gray(line.length > 110 ? `${line.slice(0, 110)}…` : line)}`);
   await client.close();
 }
 
@@ -240,6 +276,18 @@ async function errors() {
   showToolError(await invoke(readOnly, 'enrich_contact', { contactId: 'cnt_1' }));
   await readOnly.close();
 
+  step('Browser request from an unknown Origin (MCP spec: servers must validate Origin)');
+  const crossSite = await rawPost(
+    { 'X-API-Key': FULL_KEY!, Origin: 'https://evil.example' },
+    {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'ping',
+    },
+  );
+  rejected(`HTTP ${crossSite.res.status}`);
+  json(JSON.parse(crossSite.body));
+
   step('Tampered download link');
   const tampered = await fetch(`${MCP_URL.replace(/\/mcp$/, '')}/exports/exp_fake?expires=9999999999&signature=forged`);
   rejected(`HTTP ${tampered.status}`);
@@ -248,7 +296,11 @@ async function errors() {
   step('Malformed JSON-RPC body');
   const malformed = await fetch(MCP_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'X-API-Key': FULL_KEY! },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'X-API-Key': FULL_KEY!,
+    },
     body: '{"jsonrpc": "2.0", "method": ',
   });
   rejected(`HTTP ${malformed.status}`);
@@ -259,13 +311,15 @@ async function errors() {
   let attempts = 0;
   for (;;) {
     const batch = await Promise.all(
-      Array.from({ length: 25 }, () => rawPost({ 'X-API-Key': READONLY_KEY! }, { jsonrpc: '2.0', id: 1, method: 'ping' })),
+      Array.from({ length: 25 }, () =>
+        rawPost({ 'X-API-Key': READONLY_KEY! }, { jsonrpc: '2.0', id: 1, method: 'ping' }),
+      ),
     );
     attempts += batch.length;
     const limited = batch.find(({ res }) => res.status === 429);
     if (limited) {
       const accepted = batch.filter(({ res }) => res.status === 200).length + attempts - batch.length;
-      ok(`${accepted} requests accepted, then:`);
+      ok(`${accepted} more requests accepted before the quota ran out (earlier demo calls count too), then:`);
       rejected(
         `HTTP 429 · Retry-After: ${limited.res.headers.get('retry-after')}s · RateLimit-Policy: ${limited.res.headers.get('ratelimit-policy')}`,
       );

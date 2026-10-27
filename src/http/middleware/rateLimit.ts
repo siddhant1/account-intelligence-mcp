@@ -20,13 +20,15 @@ export function apiKeyRateLimiter(config: AppConfig['rateLimit'], logger: Logger
     keyGenerator: (req) => req.principal?.apiKeyId ?? 'anonymous',
     handler: (req, res, _next, options) => {
       logger.warn({ requestId: req.requestId, apiKeyId: req.principal?.apiKeyId }, 'rate limit exceeded');
-      res
-        .status(options.statusCode)
-        .json(
-          jsonRpcError(RpcErrorCode.RATE_LIMITED, `Rate limit exceeded: ${config.max} requests per ${config.windowMs / 1000}s`, {
+      res.status(options.statusCode).json(
+        jsonRpcError(
+          RpcErrorCode.RATE_LIMITED,
+          `Rate limit exceeded: ${config.max} requests per ${config.windowMs / 1000}s`,
+          {
             retryAfterSeconds: Number(res.getHeader('Retry-After')) || undefined,
-          }),
-        );
+          },
+        ),
+      );
     },
   });
 }

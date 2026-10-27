@@ -30,9 +30,10 @@ seedDatabase(db);
 const fixedNow = new Date('2026-01-15T09:30:00.000Z');
 const container = createContainer(config, createLogger(config), { db, clock: () => fixedNow });
 
+const { record } = container.services.apiKeys.create({ name: 'docs', scopes: ALL_SCOPES });
 const server = createMcpServer({
   services: container.services,
-  principal: { apiKeyId: 'key_docs', apiKeyName: 'docs', scopes: ALL_SCOPES },
+  principal: { apiKeyId: record.id, apiKeyName: record.name, scopes: record.scopes },
   logger: container.logger,
 });
 const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -63,7 +64,7 @@ function typeOf(schema: JsonSchemaProperty): string {
 function constraintsOf(schema: JsonSchemaProperty): string {
   const items = schema.items ?? {};
   return [
-    schema.pattern ?? items.pattern ? `pattern \`${schema.pattern ?? items.pattern}\`` : '',
+    (schema.pattern ?? items.pattern) ? `pattern \`${schema.pattern ?? items.pattern}\`` : '',
     schema.minLength !== undefined ? `${schema.minLength}-${schema.maxLength} chars` : '',
     schema.minimum !== undefined ? `≥ ${schema.minimum}` : '',
     schema.maximum !== undefined && schema.maximum < Number.MAX_SAFE_INTEGER ? `≤ ${schema.maximum}` : '',
@@ -73,6 +74,10 @@ function constraintsOf(schema: JsonSchemaProperty): string {
     .filter(Boolean)
     .join(', ');
 }
+
+/** Replaces per-run random values so the generated file only changes when the contract does (checked in CI). */
+const stable = (json: string) =>
+  json.replace(/exp_[A-Za-z0-9_-]{16}/g, 'exp_EXAMPLE').replace(/signature=[A-Za-z0-9_-]+/g, 'signature=EXAMPLE');
 
 const { tools } = await client.listTools();
 const sections: string[] = [];
@@ -88,6 +93,7 @@ for (const tool of tools) {
 
   const example = EXAMPLES[tool.name]!;
   const result = await client.callTool({ name: tool.name, arguments: example });
+  if (result.isError) throw new Error(`Example call for ${tool.name} failed: ${JSON.stringify(result.content)}`);
 
   sections.push(
     [
@@ -114,7 +120,7 @@ for (const tool of tools) {
       JSON.stringify(example, null, 2),
       '',
       '// structuredContent of the result',
-      JSON.stringify(result.structuredContent, null, 2),
+      stable(JSON.stringify(result.structuredContent, null, 2)),
       '```',
       '',
       '<details><summary>Output JSON Schema</summary>',

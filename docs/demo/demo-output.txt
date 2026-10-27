@@ -34,8 +34,8 @@ Account Intelligence MCP demo client → http://localhost:3100/mcp
   Search the company database by free text and filters. Text matches company name, industry, description and tags with relevance ranking; filler words such as "companies" are ignored and shorthand like "AI" or "fintech" is expanded. Returns compact summaries; call get_company for full details or search_contacts to find people.
     field         type     constraints                description                                                 
     query         string   ≤200 chars                 Free-text query, e.g. "AI companies", "payments", "computer 
-    country       string   ≤60 chars                  Country name or ISO code, e.g. "Australia" or "AU"          
-    industry      string   ≤60 chars                  Industry filter (partial, case-insensitive), e.g. "Fintech",
+    country       string   ≤60 chars                  Country name or code, e.g. "Australia", "AU", "U.S.". Unknow
+    industry      string   ≤60 chars                  Industry name or shorthand, e.g. "Fintech", "Healthcare", "A
     minEmployees  integer  min 1                      Minimum headcount (inclusive)                               
     maxEmployees  integer  min 1                      Maximum headcount (inclusive)                               
     limit         integer  min 1, max 50, default 10  Maximum results to return (1-50, default 10)                
@@ -58,6 +58,13 @@ Account Intelligence MCP demo client → http://localhost:3100/mcp
     cmp_21  Lyrebird Voice            Artificial Intelligence  48         Melbourne
     cmp_4   Coral Vision              Artificial Intelligence  34         Cairns   
   5 of 11 matches
+▶ Filters: industry shorthand ("AI" = Artificial Intelligence) and headcount range
+  → search_companies {"industry":"AI","minEmployees":100,"maxEmployees":300}
+    id      name                      industry                 employees  country       
+    cmp_51  Maple Neural              Artificial Intelligence  230        Canada        
+    cmp_3   Southern Cross Analytics  Artificial Intelligence  210        Australia     
+    cmp_39  Thamesbridge Analytics    Artificial Intelligence  190        United Kingdom
+    cmp_47  Straits AI                Artificial Intelligence  140        Singapore     
 ▶ Get company details
   → get_company {"companyId":"cmp_1"}
     {
@@ -84,6 +91,10 @@ Account Intelligence MCP demo client → http://localhost:3100/mcp
     cnt_3  Rohan Ryan     Machine Learning Engineer  senior                  false   
     cnt_7  Hannah Okafor  Senior Software Engineer   senior                  false   
     cnt_6  Mason Okafor   Software Engineer          individual_contributor  false   
+▶ Title abbreviations work both ways ("CTO" finds "Chief Technology Officer")
+  → search_contacts {"companyId":"cmp_2","jobTitle":"CTO"}
+    id      name        title                     companyName  
+    cnt_10  Freya Chen  Chief Technology Officer  Kookaburra AI
 ▶ Enrich contact
   → enrich_contact {"contactId":"cnt_3"}
     {
@@ -92,7 +103,7 @@ Account Intelligence MCP demo client → http://localhost:3100/mcp
       "email": "rohanr@signalgrid.example",
       "linkedin": "https://www.linkedin.com/in/rohan-ryan-facd49",
       "phone": null,
-      "enrichedAt": "2026-10-22T12:21:48.590Z",
+      "enrichedAt": "2026-10-26T14:49:05.475Z",
       "cached": false
     }
   → enrich_contact {"contactId":"cnt_3"}
@@ -100,14 +111,14 @@ Account Intelligence MCP demo client → http://localhost:3100/mcp
 ▶ Export contacts
   → export_contacts {"contactIds":["cnt_3","cnt_7","cnt_6"]}
     {
-      "exportId": "exp_dsNdAeCtzzsrZyjK",
-      "downloadUrl": "http://localhost:3100/exports/exp_dsNdAeCtzzsrZyjK?expires=1792672608&signature=t81f7mk3xMqAOX_igKfEY_ukqXImEfa8JbMABMf3Zu0",
+      "exportId": "exp_qjMnxxiBJoRKQGVO",
+      "downloadUrl": "http://localhost:3100/exports/exp_qjMnxxiBJoRKQGVO?expires=1793027045&signature=C4jlPYE7fGeja6gWQE1JtU1iRGWpKkYr4no4uqtpAlU",
       "format": "csv",
       "contactCount": 3,
-      "expiresAt": "2026-10-22T12:36:48.598Z"
+      "expiresAt": "2026-10-26T15:04:05.482Z"
     }
 ▶ Download the export via its signed URL (no API key needed)
-  ✔ HTTP 200 · text/csv; charset=utf-8 · attachment; filename="contacts-2026-10-22-dsNdAeCt.csv"
+  ✔ HTTP 200 · text/csv; charset=utf-8 · attachment; filename="contacts-2026-10-26-qjMnxxiB.csv"
     contact_id,full_name,first_name,last_name,title,seniority,department,location,company_id,company_name,email,li…
     cnt_3,Rohan Ryan,Rohan,Ryan,Machine Learning Engineer,senior,engineering,"Remote, Australia",cmp_1,Signalgrid,…
     cnt_7,Hannah Okafor,Hannah,Okafor,Senior Software Engineer,senior,engineering,"Sydney, Australia",cmp_1,Signal…
@@ -162,6 +173,16 @@ Account Intelligence MCP demo client → http://localhost:3100/mcp
   → enrich_contact {"contactId":"cnt_1"}
   ✖ isError: true
     MCP error -32602: Tool enrich_contact not found
+▶ Browser request from an unknown Origin (MCP spec: servers must validate Origin)
+  ✖ HTTP 403
+    {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32000,
+        "message": "Origin not allowed: https://evil.example"
+      },
+      "id": null
+    }
 ▶ Tampered download link
   ✖ HTTP 403
     {
@@ -182,7 +203,7 @@ Account Intelligence MCP demo client → http://localhost:3100/mcp
       "id": null
     }
 ▶ Rate limiting: burst of pings with the read-only key
-  ✔ 109 requests accepted, then:
+  ✔ 109 more requests accepted before the quota ran out (earlier demo calls count too), then:
   ✖ HTTP 429 · Retry-After: 60s · RateLimit-Policy: "120-in-1min"; q=120; w=60; pk=:NDQ4YjU2YjZhYmE5:
     {
       "jsonrpc": "2.0",

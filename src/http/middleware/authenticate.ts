@@ -29,7 +29,11 @@ export function extractApiKey(req: Request): string | undefined {
  * and an MCP `AuthInfo` to the request. Repeated failures from one IP are
  * throttled to make key guessing impractical.
  */
-export function authenticate(deps: { apiKeys: ApiKeyService; failedAuth: FailedAuthLimiter; logger: Logger }): RequestHandler {
+export function authenticate(deps: {
+  apiKeys: ApiKeyService;
+  failedAuth: FailedAuthLimiter;
+  logger: Logger;
+}): RequestHandler {
   return (req, res, next) => {
     const ip = req.ip ?? 'unknown';
 
@@ -38,7 +42,11 @@ export function authenticate(deps: { apiKeys: ApiKeyService; failedAuth: FailedA
       res
         .status(429)
         .set('Retry-After', String(retryAfter))
-        .json(jsonRpcError(RpcErrorCode.RATE_LIMITED, 'Too many failed authentication attempts; try again later', { retryAfterSeconds: retryAfter }));
+        .json(
+          jsonRpcError(RpcErrorCode.RATE_LIMITED, 'Too many failed authentication attempts; try again later', {
+            retryAfterSeconds: retryAfter,
+          }),
+        );
       return;
     }
 
@@ -48,7 +56,8 @@ export function authenticate(deps: { apiKeys: ApiKeyService; failedAuth: FailedA
     if (!result.ok) {
       deps.failedAuth.recordFailure(ip);
       deps.logger.warn({ requestId: req.requestId, ip, reason: result.reason }, 'authentication failed');
-      const challenge = result.reason === 'missing' ? `Bearer realm="${REALM}"` : `Bearer realm="${REALM}", error="invalid_token"`;
+      const challenge =
+        result.reason === 'missing' ? `Bearer realm="${REALM}"` : `Bearer realm="${REALM}", error="invalid_token"`;
       res
         .status(401)
         .set('WWW-Authenticate', challenge)

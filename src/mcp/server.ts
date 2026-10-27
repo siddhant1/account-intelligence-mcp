@@ -14,7 +14,10 @@ export const SERVER_INFO = {
   version: '1.0.0',
 } as const;
 
-const INSTRUCTIONS = `Account intelligence for B2B prospecting: companies, the people who work there, and their contact details.
+const instructions = (facets: {
+  countries: string[];
+  industries: string[];
+}) => `Account intelligence for B2B prospecting: companies, the people who work there, and their contact details.
 Typical workflow:
 1. search_companies to find target accounts (free text plus country, industry and headcount filters).
 2. get_company for a full profile of a promising account.
@@ -22,7 +25,9 @@ Typical workflow:
 4. enrich_contact to reveal a person's email and LinkedIn. Each new lookup uses enrichment credits, so only enrich contacts the user needs.
 5. export_contacts to give the user a downloadable CSV/JSON file; share the returned downloadUrl.
 IDs look like "cmp_12" (companies) and "cnt_34" (contacts). Never invent IDs: take them from search results.
-Errors come back as JSON {"error": {"code", "message", "hint"}}; follow the hint to recover.`;
+Errors come back as JSON {"error": {"code", "message", "hint"}}; follow the hint to recover.
+Countries in the dataset: ${facets.countries.join(', ')}.
+Industries in the dataset: ${facets.industries.join(', ')}.`;
 
 export interface McpServerDependencies {
   services: Services;
@@ -36,7 +41,7 @@ export interface McpServerDependencies {
  * they cannot call. The server is transport-agnostic (HTTP or stdio).
  */
 export function createMcpServer({ services, principal, logger }: McpServerDependencies): McpServer {
-  const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
+  const server = new McpServer(SERVER_INFO, { instructions: instructions(services.companies.facets()) });
 
   for (const tool of TOOLS) {
     if (hasScope(principal, tool.scope)) registerTool(server, tool, { services, principal, logger });

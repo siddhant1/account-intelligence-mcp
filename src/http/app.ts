@@ -4,6 +4,7 @@ import type { Container } from '../container.js';
 import { isSeeded } from '../db/seed/seed.js';
 import { SERVER_INFO } from '../mcp/server.js';
 import { errorHandler, notFoundHandler } from './errors.js';
+import { originPolicy } from './middleware/originPolicy.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { exportsRouter } from './routes/exports.js';
 import { mcpRouter } from './routes/mcp.js';
@@ -18,6 +19,8 @@ export function createHttpApp(container: Container): Express {
   // DNS-rebinding protection: reject requests whose Host header is not ours.
   app.use(hostHeaderValidation(config.http.allowedHosts));
   app.use(requestLogger(logger));
+  // Origin validation (required by the MCP spec) and CORS for allow-listed browser clients.
+  app.use(originPolicy(config.http));
 
   app.get('/health', (_req, res) => {
     const seeded = isSeeded(db);

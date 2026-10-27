@@ -25,9 +25,12 @@ describe('query parsing', () => {
     expect(parseSearchQuery('the companies')).toEqual([]);
   });
 
-  it('normalises job titles', () => {
-    expect(parseJobTitle('Senior Engineers')).toEqual(['senior', 'engineer']);
-    expect(parseJobTitle('Head of Sales')).toEqual(['head', 'sale']);
+  it('normalises job titles and expands abbreviations both ways', () => {
+    expect(parseJobTitle('Senior Engineers')).toEqual([['senior'], ['engineer']]);
+    expect(parseJobTitle('Head of Sales')).toEqual([['head'], ['sale']]);
+    expect(parseJobTitle('CTO')).toEqual([['cto', 'chief technology officer']]);
+    expect(parseJobTitle('Chief Technology Officer')).toEqual([['cto', 'chief technology officer']]);
+    expect(parseJobTitle('Vice President, Sales')).toEqual([['vp', 'vice president'], ['sale']]);
   });
 });
 
@@ -41,7 +44,9 @@ describe('CompanyService', () => {
   });
 
   it('accepts country codes and aliases', () => {
-    expect(companies.search({ country: 'AU', limit: 50 }).total).toBe(companies.search({ country: 'australia', limit: 50 }).total);
+    expect(companies.search({ country: 'AU', limit: 50 }).total).toBe(
+      companies.search({ country: 'australia', limit: 50 }).total,
+    );
     expect(companies.search({ country: 'usa', limit: 1 }).companies[0]?.country).toBe('United States');
   });
 
@@ -57,7 +62,9 @@ describe('CompanyService', () => {
   it('applies headcount bounds and validates them', () => {
     const page = companies.search({ minEmployees: 1000, limit: 50 });
     expect(page.companies.every((company) => company.employees >= 1000)).toBe(true);
-    expect(errorCode(() => companies.search({ minEmployees: 500, maxEmployees: 100, limit: 5 }))).toBe('INVALID_ARGUMENT');
+    expect(errorCode(() => companies.search({ minEmployees: 500, maxEmployees: 100, limit: 5 }))).toBe(
+      'INVALID_ARGUMENT',
+    );
   });
 
   it('is safe against FTS query syntax in user input', () => {
@@ -74,7 +81,9 @@ describe('ContactService', () => {
   it('filters by company and title, most senior first', () => {
     const page = contacts.search({ companyId: 'cmp_1', jobTitle: 'engineer', limit: 25 });
     expect(page.contacts.length).toBeGreaterThan(0);
-    expect(page.contacts.every((contact) => /engineer/i.test(contact.title) && contact.companyId === 'cmp_1')).toBe(true);
+    expect(page.contacts.every((contact) => /engineer/i.test(contact.title) && contact.companyId === 'cmp_1')).toBe(
+      true,
+    );
   });
 
   it('distinguishes an unknown company from an empty result', () => {

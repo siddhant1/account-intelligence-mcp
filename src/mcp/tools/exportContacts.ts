@@ -27,7 +27,7 @@ export const exportContactsTool = defineTool({
     exportId: z.string(),
     format: z.enum(EXPORT_FORMATS),
     contactCount: z.number().int(),
-    expiresAt: z.iso.datetime().describe('When the download link stops working'),
+    expiresAt: z.string().describe('When the download link stops working (ISO 8601, UTC)'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   execute(input, { services, principal }) {

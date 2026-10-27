@@ -1,5 +1,4 @@
-import { READ_ONLY_SCOPES, ALL_SCOPES, type Scope } from '../auth/scopes.js';
-import { hashApiKey } from '../auth/apiKeyService.js';
+import { ALL_SCOPES, READ_ONLY_SCOPES, type Scope } from '../auth/scopes.js';
 import { seedDatabase } from '../db/seed/seed.js';
 import { cliContainer, fail } from './bootstrap.js';
 
@@ -22,8 +21,7 @@ const devKeys: [string, string | undefined, readonly Scope[]][] = [
 
 for (const [name, key, scopes] of devKeys) {
   if (!key) continue;
-  const known = db.prepare('SELECT 1 FROM api_keys WHERE key_hash = ?').get(hashApiKey(key));
-  if (known) {
+  if (services.apiKeys.isRegistered(key)) {
     console.log(`API key "${name}" already registered`);
     continue;
   }

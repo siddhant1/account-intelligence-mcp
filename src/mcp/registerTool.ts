@@ -3,10 +3,9 @@ import type { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { hasScope } from '../auth/scopes.js';
 import { AppError, ForbiddenError } from '../domain/errors.js';
-import type { Logger } from '../logger.js';
 import type { ToolContext, ToolDefinition } from './toolDefinition.js';
 
-type Dependencies = Omit<ToolContext, 'signal' | 'logger'> & { logger: Logger };
+type Dependencies = Omit<ToolContext, 'signal'>;
 
 /**
  * Converts a thrown error into an MCP tool error result. Tool errors (as
@@ -23,7 +22,10 @@ export function toToolError(error: unknown): CallToolResult {
 }
 
 export function registerTool(server: McpServer, tool: ToolDefinition, deps: Dependencies): void {
-  const handler = async (input: Record<string, unknown>, extra: { requestId: string | number; signal: AbortSignal }) => {
+  const handler = async (
+    input: Record<string, unknown>,
+    extra: { requestId: string | number; signal: AbortSignal },
+  ) => {
     const logger = deps.logger.child({ tool: tool.name, apiKeyId: deps.principal.apiKeyId, rpcId: extra.requestId });
     const started = performance.now();
     const elapsed = () => Math.round(performance.now() - started);

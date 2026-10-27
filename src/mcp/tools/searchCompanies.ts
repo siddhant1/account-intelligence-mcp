@@ -25,14 +25,16 @@ export const searchCompaniesTool = defineTool({
       .min(2)
       .max(60)
       .optional()
-      .describe('Country name or ISO code, e.g. "Australia" or "AU"'),
+      .describe('Country name or code, e.g. "Australia", "AU", "U.S.". Unknown values return the valid list.'),
     industry: z
       .string()
       .trim()
       .min(2)
       .max(60)
       .optional()
-      .describe('Industry filter (partial, case-insensitive), e.g. "Fintech", "Healthcare", "Artificial Intelligence"'),
+      .describe(
+        'Industry name or shorthand, e.g. "Fintech", "Healthcare", "AI" (= Artificial Intelligence), "tech" (all *tech industries). Unknown values return the valid list.',
+      ),
     minEmployees: z.number().int().min(1).optional().describe('Minimum headcount (inclusive)'),
     maxEmployees: z.number().int().min(1).optional().describe('Maximum headcount (inclusive)'),
     limit: z.number().int().min(1).max(50).default(10).describe('Maximum results to return (1-50, default 10)'),

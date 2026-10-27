@@ -25,7 +25,10 @@ export interface ToolDefinition<I extends z.ZodRawShape = z.ZodRawShape, O exten
   inputSchema: I;
   outputSchema: O;
   annotations: ToolAnnotations;
-  execute(input: z.output<z.ZodObject<I>>, context: ToolContext): Promise<z.output<z.ZodObject<O>>> | z.output<z.ZodObject<O>>;
+  execute(
+    input: z.output<z.ZodObject<I>>,
+    context: ToolContext,
+  ): Promise<z.output<z.ZodObject<O>>> | z.output<z.ZodObject<O>>;
 }
 
 export const defineTool = <I extends z.ZodRawShape, O extends z.ZodRawShape>(definition: ToolDefinition<I, O>) =>

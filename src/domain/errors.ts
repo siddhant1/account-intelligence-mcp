@@ -4,13 +4,7 @@
  * AppError is treated as an unexpected internal failure.
  */
 export type ErrorCode =
-  | 'INVALID_ARGUMENT'
-  | 'NOT_FOUND'
-  | 'UNAUTHENTICATED'
-  | 'FORBIDDEN'
-  | 'RATE_LIMITED'
-  | 'EXPIRED'
-  | 'INTERNAL';
+  'INVALID_ARGUMENT' | 'NOT_FOUND' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'RATE_LIMITED' | 'EXPIRED' | 'INTERNAL';
 
 export class AppError extends Error {
   constructor(

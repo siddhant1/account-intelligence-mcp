@@ -99,6 +99,24 @@ export function migrate(db: Db): void {
   }
 }
 
+/**
+ * Adds a case-insensitive `REGEXP` operator (`value REGEXP pattern`), which
+ * SQLite parses but does not implement. Compiled patterns are cached.
+ */
+function registerRegexp(db: Db): void {
+  const cache = new Map<string, RegExp>();
+  db.function('regexp', { deterministic: true }, (pattern: unknown, value: unknown) => {
+    if (typeof pattern !== 'string' || typeof value !== 'string') return 0;
+    let regex = cache.get(pattern);
+    if (!regex) {
+      if (cache.size > 1000) cache.clear();
+      regex = new RegExp(pattern, 'iu');
+      cache.set(pattern, regex);
+    }
+    return regex.test(value) ? 1 : 0;
+  });
+}
+
 /** Opens (creating if needed) and migrates the SQLite database. Pass `:memory:` for tests. */
 export function openDatabase(file: string): Db {
   if (file !== ':memory:') mkdirSync(path.dirname(file), { recursive: true });
@@ -107,6 +125,7 @@ export function openDatabase(file: string): Db {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');
+  registerRegexp(db);
   migrate(db);
   return db;
 }

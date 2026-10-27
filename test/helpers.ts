@@ -1,3 +1,4 @@
+import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -53,7 +54,7 @@ export async function connectInMemory(context: ReturnType<typeof createTestConta
 /** Starts the real HTTP app on an ephemeral port. */
 export async function startHttpServer(context: ReturnType<typeof createTestContainer>) {
   const app = createHttpApp(context.container);
-  const server = await new Promise<import('node:http').Server>((resolve) => {
+  const server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, '127.0.0.1', () => resolve(listening));
   });
   const { port } = server.address() as AddressInfo;

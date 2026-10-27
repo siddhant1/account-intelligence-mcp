@@ -12,9 +12,7 @@ export const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.
 
 const DEV_EXPORT_SECRET = 'dev-only-export-signing-secret-change-me';
 
-const booleanFromString = z
-  .enum(['true', 'false', '1', '0'])
-  .transform((value) => value === 'true' || value === '1');
+const booleanFromString = z.enum(['true', 'false', '1', '0']).transform((value) => value === 'true' || value === '1');
 
 const envSchema = z
   .object({
@@ -26,6 +24,7 @@ const envSchema = z
     PORT: z.coerce.number().int().min(0).max(65535).default(3100),
     PUBLIC_BASE_URL: z.url().optional(),
     ALLOWED_HOSTS: z.string().default('localhost,127.0.0.1,[::1]'),
+    ALLOWED_ORIGINS: z.string().default(''),
     TRUST_PROXY: booleanFromString.default(false),
 
     DATABASE_PATH: z.string().min(1).default('./data/account-intel.db'),
@@ -34,13 +33,21 @@ const envSchema = z
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
     AUTH_FAILURE_LIMIT: z.coerce.number().int().positive().default(20),
 
-    EXPORT_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7 * 24 * 3600).default(900),
+    EXPORT_URL_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(7 * 24 * 3600)
+      .default(900),
     EXPORT_SIGNING_SECRET: z.string().min(16).default(DEV_EXPORT_SECRET),
 
     ENRICHMENT_LATENCY_MS: z.coerce.number().int().min(0).default(150),
   })
   .superRefine((env, ctx) => {
-    if (env.NODE_ENV === 'production' && (env.EXPORT_SIGNING_SECRET === DEV_EXPORT_SECRET || env.EXPORT_SIGNING_SECRET.length < 32)) {
+    if (
+      env.NODE_ENV === 'production' &&
+      (env.EXPORT_SIGNING_SECRET === DEV_EXPORT_SECRET || env.EXPORT_SIGNING_SECRET.length < 32)
+    ) {
       ctx.addIssue({
         code: 'custom',
         path: ['EXPORT_SIGNING_SECRET'],
@@ -57,6 +64,8 @@ export interface AppConfig {
     port: number;
     publicBaseUrl: string;
     allowedHosts: string[];
+    /** Extra browser origins (beyond those on allowedHosts) that may call the server. */
+    allowedOrigins: string[];
     trustProxy: boolean;
   };
   databasePath: string;
@@ -64,6 +73,12 @@ export interface AppConfig {
   exports: { urlTtlSeconds: number; signingSecret: string };
   enrichment: { latencyMs: number };
 }
+
+const splitList = (value: string) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
 /** Loads `.env` from the project root (if present) without overriding real environment variables. */
 function loadDotEnv(): void {
@@ -86,12 +101,17 @@ export function loadConfig(overrides: Record<string, string | undefined> = {}): 
 
   return {
     env: env.NODE_ENV,
-    log: { level: env.LOG_LEVEL, pretty: env.LOG_PRETTY ?? env.NODE_ENV === 'development' },
+    // Pretty logs only for a human at a terminal; MCP clients that spawn the server capture stderr to files.
+    log: {
+      level: env.LOG_LEVEL,
+      pretty: env.LOG_PRETTY ?? (env.NODE_ENV === 'development' && Boolean(process.stderr.isTTY)),
+    },
     http: {
       host: env.HOST,
       port: env.PORT,
       publicBaseUrl: (env.PUBLIC_BASE_URL ?? `http://localhost:${env.PORT}`).replace(/\/+$/, ''),
-      allowedHosts: env.ALLOWED_HOSTS.split(',').map((host) => host.trim()).filter(Boolean),
+      allowedHosts: splitList(env.ALLOWED_HOSTS),
+      allowedOrigins: splitList(env.ALLOWED_ORIGINS).map((origin) => origin.replace(/\/+$/, '')),
       trustProxy: env.TRUST_PROXY,
     },
     databasePath,

@@ -7,10 +7,11 @@ import type { Principal, Scope } from './scopes.js';
 export const API_KEY_PREFIX = 'aip_';
 const API_KEY_PATTERN = /^aip_[A-Za-z0-9_-]{24,128}$/;
 const DISPLAY_PREFIX_LENGTH = 12;
+/** `last_used_at` is refreshed at most this often, so authentication does not write on every request. */
+const LAST_USED_RESOLUTION_MS = 60_000;
 
 export type AuthenticationResult =
-  | { ok: true; principal: Principal }
-  | { ok: false; reason: 'missing' | 'malformed' | 'unknown' | 'revoked' };
+  { ok: true; principal: Principal } | { ok: false; reason: 'missing' | 'malformed' | 'unknown' | 'revoked' };
 
 /**
  * Keys are random 192-bit secrets, so a fast SHA-256 digest is enough to store
@@ -56,8 +57,16 @@ export class ApiKeyService {
     if (!record) return { ok: false, reason: 'unknown' };
     if (record.revokedAt) return { ok: false, reason: 'revoked' };
 
-    this.keys.touch(record.id, this.clock().toISOString());
+    const now = this.clock();
+    if (!record.lastUsedAt || now.getTime() - Date.parse(record.lastUsedAt) >= LAST_USED_RESOLUTION_MS) {
+      this.keys.touch(record.id, now.toISOString());
+    }
     return { ok: true, principal: { apiKeyId: record.id, apiKeyName: record.name, scopes: record.scopes } };
+  }
+
+  /** Whether this exact key has been registered (active or revoked). */
+  isRegistered(key: string): boolean {
+    return this.keys.findByHash(hashApiKey(key)) !== undefined;
   }
 
   list(): ApiKeyRecord[] {

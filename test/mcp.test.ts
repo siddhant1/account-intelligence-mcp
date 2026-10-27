@@ -56,13 +56,19 @@ describe('MCP server (full-access key)', () => {
     const company = await client.callTool({ name: 'get_company', arguments: { companyId: 'cmp_1' } });
     expect(company.structuredContent).toMatchObject({ id: 'cmp_1', website: 'https://www.signalgrid.example' });
 
-    const search = await client.callTool({ name: 'search_contacts', arguments: { companyId: 'cmp_1', jobTitle: 'Engineer' } });
+    const search = await client.callTool({
+      name: 'search_contacts',
+      arguments: { companyId: 'cmp_1', jobTitle: 'Engineer' },
+    });
     const { contacts } = search.structuredContent as { contacts: { id: string; title: string; enriched: boolean }[] };
     expect(contacts.length).toBeGreaterThan(0);
     expect(contacts.every((contact) => contact.title.includes('Engineer'))).toBe(true);
 
     const enriched = await client.callTool({ name: 'enrich_contact', arguments: { contactId: contacts[0]!.id } });
-    expect(enriched.structuredContent).toMatchObject({ contactId: contacts[0]!.id, email: expect.stringContaining('@') });
+    expect(enriched.structuredContent).toMatchObject({
+      contactId: contacts[0]!.id,
+      email: expect.stringContaining('@'),
+    });
 
     const exported = await client.callTool({
       name: 'export_contacts',
@@ -87,7 +93,10 @@ describe('MCP server (full-access key)', () => {
 
   it('reports domain errors with a code and recovery hint', async () => {
     const result = await client.callTool({ name: 'get_company', arguments: { companyId: 'cmp_9999' } });
-    expect(toolError(result).json?.error).toMatchObject({ code: 'NOT_FOUND', hint: expect.stringContaining('search_companies') });
+    expect(toolError(result).json?.error).toMatchObject({
+      code: 'NOT_FOUND',
+      hint: expect.stringContaining('search_companies'),
+    });
 
     const country = await client.callTool({ name: 'search_companies', arguments: { country: 'Atlantis' } });
     expect(toolError(country).json?.error?.code).toBe('INVALID_ARGUMENT');
@@ -99,7 +108,10 @@ describe('MCP server (full-access key)', () => {
     const resource = await client.readResource({ uri: 'account-intel://companies/cmp_1' });
     expect(JSON.parse((resource.contents[0] as { text: string }).text)).toMatchObject({ name: 'Signalgrid' });
 
-    const prompt = await client.getPrompt({ name: 'build_prospect_list', arguments: { role: 'CTO', segment: 'AI companies' } });
+    const prompt = await client.getPrompt({
+      name: 'build_prospect_list',
+      arguments: { role: 'CTO', segment: 'AI companies' },
+    });
     expect(JSON.stringify(prompt.messages)).toContain('enrich_contact');
   });
 });

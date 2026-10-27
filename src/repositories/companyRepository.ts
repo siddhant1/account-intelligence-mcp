@@ -23,7 +23,8 @@ export interface CompanySearchCriteria {
   terms: readonly SearchTerm[];
   matchAny?: boolean;
   country?: string;
-  industry?: string;
+  /** Canonical industry names; a company matches if it is in any of them. */
+  industries?: readonly string[];
   minEmployees?: number;
   maxEmployees?: number;
   limit: number;
@@ -55,12 +56,8 @@ function ftsToken(token: string): string {
 }
 
 export function toFtsExpression(terms: readonly SearchTerm[], matchAny = false): string {
-  return terms
-    .map((alternatives) => `(${alternatives.map(ftsToken).join(' OR ')})`)
-    .join(matchAny ? ' OR ' : ' AND ');
+  return terms.map((alternatives) => `(${alternatives.map(ftsToken).join(' OR ')})`).join(matchAny ? ' OR ' : ' AND ');
 }
-
-export const escapeLike = (value: string) => value.replace(/[\\%_]/g, (char) => `\\${char}`);
 
 export class CompanyRepository {
   private readonly byId;
@@ -110,9 +107,12 @@ export class CompanyRepository {
       where.push('c.country = @country COLLATE NOCASE');
       params.country = criteria.country;
     }
-    if (criteria.industry) {
-      where.push("c.industry LIKE @industry ESCAPE '\\'");
-      params.industry = `%${escapeLike(criteria.industry)}%`;
+    if (criteria.industries?.length) {
+      const names = criteria.industries.map((industry, index) => {
+        params[`industry${index}`] = industry;
+        return `@industry${index}`;
+      });
+      where.push(`c.industry IN (${names.join(', ')})`);
     }
     if (criteria.minEmployees !== undefined) {
       where.push('c.employees >= @minEmployees');

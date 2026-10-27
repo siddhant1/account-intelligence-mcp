@@ -1,0 +1,7 @@
+dist/
+coverage/
+data/
+node_modules/
+package-lock.json
+docs/demo/demo-output.txt
+docs/TOOLS.md
